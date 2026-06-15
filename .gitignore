@@ -1,0 +1,32 @@
+node_modules/
+dist/
+build/
+Asistencia-Backend/uploads/
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# Angular
+.angular/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+*.local
