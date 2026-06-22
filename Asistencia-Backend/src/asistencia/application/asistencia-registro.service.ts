@@ -10,6 +10,8 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AsistenciaRegistroOrmEntity } from '../infrastructure/entities/asistencia-registro.orm-entity';
 import { AsistenciaSesionOrmEntity } from '../infrastructure/entities/asistencia-sesion.orm-entity';
+import { AsistenciaOrmEntity } from '../infrastructure/entities/asistencia.orm-entity';
+import { EstadoAsistencia } from '../domain/entities/asistencia.entity';
 import { CreateAsistenciaRegistroDto } from '../infrastructure/http/dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from '../infrastructure/http/dto/marcar-falla.dto';
 import { VerificarRostroDto } from '../infrastructure/http/dto/verificar-rostro.dto';
@@ -27,6 +29,8 @@ export class AsistenciaRegistroService {
     private readonly sesionRepo: Repository<AsistenciaSesionOrmEntity>,
     @InjectRepository(AprendizCG)
     private readonly aprendizRepo: Repository<AprendizCG>,
+    @InjectRepository(AsistenciaOrmEntity)
+    private readonly asistenciaRepo: Repository<AsistenciaOrmEntity>,
     private readonly http: HttpService,
   ) {}
 
@@ -109,6 +113,33 @@ export class AsistenciaRegistroService {
       attendancePhotoPath = saveAttendanceFace(aprendiz.id, dto.faceVerificationImage);
     }
 
+    // Buscar o crear asistencia legacy vinculada a la sesión y al aprendiz
+    let asistenciaId: string | null = null;
+    if (sesion.formacionAsistenciaId) {
+      const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
+      let asistencia = await this.asistenciaRepo.findOne({
+        where: {
+          formacion_fk: sesion.formacionAsistenciaId,
+          aprendizId: aprendiz.id,
+        },
+      });
+      if (asistencia) {
+        asistencia.estado = EstadoAsistencia.asistio;
+        asistencia.hora = horaActual;
+        asistencia = await this.asistenciaRepo.save(asistencia);
+      } else {
+        asistencia = await this.asistenciaRepo.save(
+          this.asistenciaRepo.create({
+            formacion_fk: sesion.formacionAsistenciaId,
+            aprendizId: aprendiz.id,
+            estado: EstadoAsistencia.asistio,
+            hora: horaActual,
+          }),
+        );
+      }
+      asistenciaId = asistencia.id_asistencia;
+    }
+
     // Crear registro de firma
     const registro = this.registroRepo.create({
       sesionId: dto.sesionId,
@@ -119,6 +150,7 @@ export class AsistenciaRegistroService {
       ipAddress: dto.ipAddress,
       latitud: dto.latitud,
       longitud: dto.longitud,
+      asistenciaId,
     } as any);
 
     const savedResult = await this.registroRepo.save(registro);
@@ -164,10 +196,39 @@ export class AsistenciaRegistroService {
     const existente = await this.registroRepo.findOne({
       where: { sesionId: dto.sesionId, aprendizId: dto.aprendizId },
     });
+
+    // Buscar o crear asistencia legacy para falla justificada
+    let asistenciaId: string | null = null;
+    if (sesion.formacionAsistenciaId) {
+      const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
+      let asistencia = await this.asistenciaRepo.findOne({
+        where: {
+          formacion_fk: sesion.formacionAsistenciaId,
+          aprendizId: dto.aprendizId,
+        },
+      });
+      if (asistencia) {
+        asistencia.estado = EstadoAsistencia.excusa;
+        asistencia.hora = horaActual;
+        asistencia = await this.asistenciaRepo.save(asistencia);
+      } else {
+        asistencia = await this.asistenciaRepo.save(
+          this.asistenciaRepo.create({
+            formacion_fk: sesion.formacionAsistenciaId,
+            aprendizId: dto.aprendizId,
+            estado: EstadoAsistencia.excusa,
+            hora: horaActual,
+          }),
+        );
+      }
+      asistenciaId = asistencia.id_asistencia;
+    }
+
     if (existente) {
       existente.estado = 'falla_justificada';
       existente.nota = dto.nota || undefined;
       existente.soporteUrl = dto.soporte || undefined;
+      existente.asistenciaId = asistenciaId;
       return this.registroRepo.save(existente);
     }
 
@@ -177,6 +238,7 @@ export class AsistenciaRegistroService {
       estado: 'falla_justificada',
       nota: dto.nota || undefined,
       soporteUrl: dto.soporte || undefined,
+      asistenciaId,
     } as any);
     return this.registroRepo.save(registro);
   }

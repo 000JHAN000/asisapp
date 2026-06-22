@@ -18,11 +18,14 @@ export class FormacionAsistenciaOrmEntity {
   @Column({ type: 'time' })
   hora_fin: string;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: true })
   horario_fk: string;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: true })
   configuracion_fk: string;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  cgHorarioId: string;
 
   @Column({
     type: 'enum',
@@ -31,11 +34,11 @@ export class FormacionAsistenciaOrmEntity {
   })
   estado: EstadoFormacionAsistencia;
 
-  @ManyToOne(() => HorarioOrmEntity)
+  @ManyToOne(() => HorarioOrmEntity, { nullable: true })
   @JoinColumn({ name: 'horario_fk' })
   horario: HorarioOrmEntity;
 
-  @ManyToOne(() => ConfiguracionAsistenciaOrmEntity)
+  @ManyToOne(() => ConfiguracionAsistenciaOrmEntity, { nullable: true })
   @JoinColumn({ name: 'configuracion_fk' })
   configuracion: ConfiguracionAsistenciaOrmEntity;
 

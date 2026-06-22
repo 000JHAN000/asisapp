@@ -22,6 +22,9 @@ export class AsistenciaOrmEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   archivo_soporte: string;
 
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  aprendizId: string;
+
   @ManyToOne(() => FormacionAsistenciaOrmEntity, (formacion) => formacion.asistencias)
   @JoinColumn({ name: 'formacion_fk' })
   formacion: FormacionAsistenciaOrmEntity;

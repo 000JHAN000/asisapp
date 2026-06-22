@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { FormacionAsistenciaOrmEntity } from './formacion-asistencia.orm-entity';
 
 export type EstadoSesion = 'activa' | 'cerrada' | 'cancelada';
 
@@ -29,6 +32,13 @@ export class AsistenciaSesionOrmEntity {
 
   @Column({ type: 'varchar', length: 36 })
   instructorId: string;
+
+  @Column('uuid', { nullable: true })
+  formacionAsistenciaId: string;
+
+  @ManyToOne(() => FormacionAsistenciaOrmEntity, { nullable: true })
+  @JoinColumn({ name: 'formacionAsistenciaId' })
+  formacionAsistencia: FormacionAsistenciaOrmEntity;
 
   @CreateDateColumn()
   createdAt: Date;

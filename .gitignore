@@ -1,7 +1,8 @@
 node_modules/
 dist/
 build/
-Asistencia-Backend/uploads/
+.env
+Asistencia-Backend/.env
 .env.*
 !.env.example
 *.log

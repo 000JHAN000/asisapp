@@ -3,7 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AsistenciaSesionOrmEntity } from './asistencia-sesion.orm-entity';
+import { AsistenciaOrmEntity } from './asistencia.orm-entity';
 
 export type EstadoRegistro = 'presente' | 'falla_justificada';
 
@@ -12,8 +16,12 @@ export class AsistenciaRegistroOrmEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'uuid', nullable: true })
   sesionId: string;
+
+  @ManyToOne(() => AsistenciaSesionOrmEntity, { nullable: true })
+  @JoinColumn({ name: 'sesionId' })
+  sesion: AsistenciaSesionOrmEntity;
 
   @Column({ type: 'varchar', length: 36 })
   aprendizId: string;
@@ -44,4 +52,11 @@ export class AsistenciaRegistroOrmEntity {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   soporteUrl?: string;
+
+  @Column('uuid', { nullable: true })
+  asistenciaId: string | null;
+
+  @ManyToOne(() => AsistenciaOrmEntity, { nullable: true })
+  @JoinColumn({ name: 'asistenciaId' })
+  asistencia: AsistenciaOrmEntity;
 }

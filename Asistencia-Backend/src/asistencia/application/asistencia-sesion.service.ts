@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AsistenciaSesionOrmEntity } from '../infrastructure/entities/asistencia-sesion.orm-entity';
 import { AsistenciaRegistroOrmEntity } from '../infrastructure/entities/asistencia-registro.orm-entity';
+import { FormacionAsistenciaOrmEntity } from '../infrastructure/entities/formacion-asistencia.orm-entity';
 import { HorarioCG } from '../../chronogest/entities/horario-cg.entity';
 import { AprendizCG } from '../../chronogest/entities/aprendiz-cg.entity';
 import { CreateAsistenciaSesionDto } from '../infrastructure/http/dto/create-asistencia-sesion.dto';
@@ -19,6 +20,8 @@ export class AsistenciaSesionService {
     private readonly horarioRepo: Repository<HorarioCG>,
     @InjectRepository(AprendizCG)
     private readonly aprendizRepo: Repository<AprendizCG>,
+    @InjectRepository(FormacionAsistenciaOrmEntity)
+    private readonly formacionRepo: Repository<FormacionAsistenciaOrmEntity>,
   ) {}
 
   async create(dto: CreateAsistenciaSesionDto, instructorId: string) {
@@ -42,6 +45,23 @@ export class AsistenciaSesionService {
       throw new BadRequestException('La fecha de la sesión debe ser hoy');
     }
 
+    // Buscar o crear formación de asistencia legacy vinculada a este horario ChronoGest
+    let formacion = await this.formacionRepo.findOne({
+      where: {
+        cgHorarioId: dto.horarioId,
+        fecha: new Date(dto.fecha),
+      },
+    });
+    if (!formacion) {
+      formacion = this.formacionRepo.create({
+        cgHorarioId: dto.horarioId,
+        fecha: new Date(dto.fecha),
+        hora_inicio: dto.horaInicio,
+        hora_fin: dto.horaFin,
+      });
+      formacion = await this.formacionRepo.save(formacion);
+    }
+
     // Cerrar sesiones activas previas del mismo horario
     await this.sesionRepo.update(
       { horarioId: dto.horarioId, estado: 'activa' },
@@ -52,6 +72,7 @@ export class AsistenciaSesionService {
       ...dto,
       instructorId,
       estado: 'activa',
+      formacionAsistenciaId: formacion.id_formacion,
     });
     return this.sesionRepo.save(sesion);
   }
