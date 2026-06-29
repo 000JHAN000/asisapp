@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/services/api.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { Tenant } from '../../../core/models/user.model';
 import { LucideAngularModule } from 'lucide-angular';
 import { SearchableSelectComponent, SSOption } from '../../../shared/components/searchable-select.component';
 import { ToastService } from '../../../core/services/toast.service';
@@ -11,7 +13,11 @@ import { ToastService } from '../../../core/services/toast.service';
   imports: [FormsModule, LucideAngularModule, SearchableSelectComponent],
   template: `
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
-      <div><h2>Usuarios del Sistema</h2><p class="text-muted text-sm">Gestiona todos los usuarios por rol</p></div>
+      <div><h2>Usuarios del Sistema</h2><p class="text-muted text-sm">Gestiona instructores y aprendices</p></div>
+      <button class="btn-register" (click)="openModal()">
+        <lucide-icon name="plus" [size]="16"></lucide-icon>
+        Registrar usuario
+      </button>
     </div>
 
     <!-- Tabs -->
@@ -49,7 +55,7 @@ import { ToastService } from '../../../core/services/toast.service';
       <table class="data-table">
         <thead><tr>
           <th>Nombre</th><th>Documento</th><th>Cargo</th>
-          <th>Estado</th><th>Municipio</th><th>Es Líder</th><th>Área que Lidera</th><th>Transversal</th>
+          <th>Estado</th><th>Municipio</th><th>Es Líder</th><th>Área que Lidera</th><th>Transversal</th><th>Sede</th>
         </tr></thead>
         <tbody>
           @for (i of filteredInstructores(); track i.id) {
@@ -95,10 +101,17 @@ import { ToastService } from '../../../core/services/toast.service';
                 <span class="slider"></span>
               </label>
             </td>
+            <td>
+              <div style="min-width:160px">
+                <app-ss [options]="tenantsOpts()" placeholder="Sin sede"
+                        [ngModel]="i.tenantSlug ?? ''"
+                        (ngModelChange)="setTenant(i, $event)"></app-ss>
+              </div>
+            </td>
           </tr>
           }
           @empty {
-          <tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:24px;">
+          <tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:24px;">
             No se encontraron instructores
           </td></tr>
           }
@@ -131,7 +144,7 @@ import { ToastService } from '../../../core/services/toast.service';
       <table class="data-table">
         <thead><tr>
           <th>Nombre</th><th>Documento</th><th>Correo</th>
-          <th>Ficha</th><th>Municipio</th><th>Estado</th>
+          <th>Ficha</th><th>Municipio</th><th>Estado</th><th>Sede</th>
         </tr></thead>
         <tbody>
           @for (a of filteredAprendices(); track a.id) {
@@ -158,10 +171,17 @@ import { ToastService } from '../../../core/services/toast.service';
                 {{ a.sesionActiva ? 'Activo' : 'Inactivo' }}
               </span>
             </td>
+            <td>
+              <div style="min-width:160px">
+                <app-ss [options]="tenantsOpts()" placeholder="Sin sede"
+                        [ngModel]="a.tenantSlug ?? ''"
+                        (ngModelChange)="setTenant(a, $event)"></app-ss>
+              </div>
+            </td>
           </tr>
           }
           @empty {
-          <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px;">
+          <tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">
             No se encontraron aprendices
           </td></tr>
           }
@@ -170,59 +190,74 @@ import { ToastService } from '../../../core/services/toast.service';
     </div>
     }
 
-    <!-- Administradores -->
-    @if (activeTab() === 'administradores') {
-    <div class="card mt-4 table-wrap">
-      <!-- Search bar -->
-      <div class="table-search-bar">
-        <div class="tbl-search-wrap">
-          <lucide-icon name="search" [size]="14" class="tbl-search-icon"></lucide-icon>
-          <input class="tbl-search-input"
-                 type="text"
-                 placeholder="Buscar por nombre, documento, correo..."
-                 [value]="searchDisplay"
-                 (input)="onSearch($any($event.target).value)">
-          @if (searchDisplay) {
-            <button class="tbl-search-clear" (click)="clearSearch()">
-              <lucide-icon name="x" [size]="12"></lucide-icon>
-            </button>
-          }
+    <!-- MODAL REGISTRO UNITARIO -->
+    @if (showModal()) {
+    <div class="modal-overlay" (click)="closeModal()">
+      <div class="modal-box" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Registrar usuario</h3>
+          <button class="modal-close" (click)="closeModal()">
+            <lucide-icon name="x" [size]="18"></lucide-icon>
+          </button>
         </div>
-        <span class="tbl-results-count">{{ filteredAdmins().length }} resultado{{ filteredAdmins().length !== 1 ? 's' : '' }}</span>
-      </div>
 
-      <table class="data-table">
-        <thead><tr>
-          <th>Nombre</th><th>Documento</th><th>Correo</th><th>Estado</th>
-        </tr></thead>
-        <tbody>
-          @for (a of filteredAdmins(); track a.id) {
-          <tr>
-            <td>
-              <div class="flex items-center gap-2">
-                <div class="mini-avatar" style="background: var(--red, #dc2626)">{{ a.nombre[0] }}{{ a.apellido?.[0] ?? '' }}</div>
-                <div>
-                  <div style="font-weight:600">{{ a.nombre }} {{ a.apellido }}</div>
-                </div>
-              </div>
-            </td>
-            <td>{{ a.tipoDoc }} {{ a.numDoc }}</td>
-            <td class="text-xs text-muted">{{ a.correo || '—' }}</td>
-            <td>
-              <span class="status-badge" [class.status-active]="a.sesionActiva" [class.status-inactive]="!a.sesionActiva">
-                <span class="status-dot"></span>
-                {{ a.sesionActiva ? 'Activo' : 'Inactivo' }}
-              </span>
-            </td>
-          </tr>
+        <form (ngSubmit)="doRegister()" class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Rol *</label>
+              <select class="form-control" [(ngModel)]="regForm.rol" name="rol" required>
+                <option value="instructor">Instructor</option>
+                <option value="aprendiz">Aprendiz</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Documento *</label>
+              <input class="form-control" type="text" [(ngModel)]="regForm.numDoc" name="numDoc" required placeholder="12345678" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nombre *</label>
+              <input class="form-control" type="text" [(ngModel)]="regForm.nombre" name="nombre" required placeholder="Nombre" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Apellido</label>
+              <input class="form-control" type="text" [(ngModel)]="regForm.apellido" name="apellido" placeholder="Apellido" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Correo *</label>
+              <input class="form-control" type="email" [(ngModel)]="regForm.correo" name="correo" required placeholder="correo@ejemplo.com" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Contraseña *</label>
+              <input class="form-control" type="password" [(ngModel)]="regForm.password" name="password" required placeholder="••••••••" />
+            </div>
+
+            @if (regForm.rol === 'aprendiz') {
+            <div class="form-group full-width">
+              <label class="form-label">Ficha *</label>
+              <app-ss [options]="fichasOpts()" placeholder="Seleccionar ficha..."
+                      [(ngModel)]="regForm.fichaId" name="fichaId"></app-ss>
+            </div>
+            }
+          </div>
+
+          @if (regError()) {
+            <div class="alert alert-error">{{ regError() }}</div>
           }
-          @empty {
-          <tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:24px;">
-            No se encontraron administradores
-          </td></tr>
-          }
-        </tbody>
-      </table>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-outline" (click)="closeModal()">Cancelar</button>
+            <button type="submit" class="btn-submit" [disabled]="regLoading()">
+              @if (regLoading()) { <span class="spinner"></span> Registrando... }
+              @else { Registrar }
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
     }
   `,
@@ -300,6 +335,76 @@ import { ToastService } from '../../../core/services/toast.service';
     }
     .status-active .status-dot  { background: #16a34a; }
     .status-inactive .status-dot { background: #9ca3af; }
+
+    /* Register button */
+    .btn-register {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--navy, #1e3a5f); color: #fff;
+      border: none; border-radius: 8px; padding: 10px 16px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-register:hover { background: #2a4d7a; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; padding: 20px;
+    }
+    .modal-box {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 520px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.2);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px; border-bottom: 1px solid var(--border, #e5e7eb);
+    }
+    .modal-header h3 { margin: 0; font-size: 16px; color: #111827; }
+    .modal-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted, #6b7280);
+    }
+    .modal-body { padding: 20px; }
+    .modal-body .form-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full-width { grid-column: 1 / -1; }
+    .form-label { font-size: 12px; font-weight: 600; color: #374151; }
+    .form-control {
+      padding: 10px 12px; border: 1.5px solid #d1d5db;
+      border-radius: 8px; font-size: 13px; color: #111827; background: #fff;
+    }
+    .form-control:focus { outline: none; border-color: var(--navy, #1e3a5f); }
+    .alert-error {
+      background: #fee2e2; color: #991b1b;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 12px;
+    }
+    .modal-actions {
+      display: flex; justify-content: flex-end; gap: 10px;
+      margin-top: 18px;
+    }
+    .btn-outline {
+      padding: 10px 16px; border: 1.5px solid #d1d5db;
+      background: transparent; border-radius: 8px;
+      font-size: 13px; font-weight: 600; color: #374151; cursor: pointer;
+    }
+    .btn-submit {
+      padding: 10px 18px; background: var(--navy, #1e3a5f); color: #fff;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-submit:disabled { opacity: .6; cursor: not-allowed; }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .modal-body .form-grid { grid-template-columns: 1fr; }
+    }
   `],
 })
 export class AdminUsuariosComponent implements OnInit, OnDestroy {
@@ -313,12 +418,36 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
   tabs = [
     { key: 'instructores', icon: 'graduation-cap', label: 'Instructores' },
     { key: 'aprendices', icon: 'users', label: 'Aprendices' },
-    { key: 'administradores', icon: 'shield', label: 'Administradores' },
   ];
   activeTab = signal('instructores');
   instructores = signal<any[]>([]);
   aprendices = signal<any[]>([]);
   admins = signal<any[]>([]);
+  tenants = signal<Tenant[]>([]);
+
+  // Modal registro unitario
+  showModal = signal(false);
+  regLoading = signal(false);
+  regError = signal('');
+  fichas = signal<any[]>([]);
+  regForm: any = {
+    rol: 'instructor',
+    numDoc: '',
+    nombre: '',
+    apellido: '',
+    correo: '',
+    password: '',
+    fichaId: '',
+  };
+
+  fichasOpts = computed<SSOption[]>(() => [
+    { value: '', label: 'Seleccionar ficha...' },
+    ...this.fichas().map(f => ({ value: f.id, label: `${f.codigo} — ${f.programa}` })),
+  ]);
+  tenantsOpts = computed<SSOption[]>(() => [
+    { value: '', label: 'Sin sede' },
+    ...this.tenants().map(t => ({ value: t.slug, label: t.nombre })),
+  ]);
 
   // ── Search (debounced) ──────────────────────────────────────
   searchDisplay = '';
@@ -374,7 +503,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
 
   private toast = inject(ToastService);
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private auth: AuthService) {}
 
   ngOnInit() {
     this.loadAll();
@@ -391,6 +520,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     this.api.getAprendices().subscribe(a => this.aprendices.set(a));
     this.api.getAdministradores().subscribe(a => this.admins.set(a));
     this.api.getAreas().subscribe(a => this.areas.set(a));
+    this.api.getTenants().subscribe(t => this.tenants.set(t ?? []));
   }
 
   toggleLider(i: any, event: Event) {
@@ -419,6 +549,19 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     });
   }
 
+  setTenant(u: any, tenantSlug: string) {
+    const documento = u.numDoc || u.documento;
+    this.api.updateTenant(documento, tenantSlug || null).subscribe({
+      next: () => {
+        const label = this.tenants().find(t => t.slug === tenantSlug)?.nombre ?? 'Sin sede';
+        u.tenantSlug = tenantSlug || null;
+        u.tenantNombre = label;
+        this.toast.success('Sede actualizada', `${u.nombre} ahora pertenece a ${label}.`);
+      },
+      error: (e) => this.toast.error('Error al actualizar sede', e?.error?.message ?? 'No se pudo cambiar la sede.'),
+    });
+  }
+
   toggleTransversal(i: any, event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     this.api.setInstructorTransversal(i.id, checked).subscribe({
@@ -432,6 +575,55 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
         );
       },
       error: (e) => this.toast.error('Error al actualizar', e?.error?.message ?? 'No se pudo cambiar el estado transversal.'),
+    });
+  }
+
+  openModal() {
+    this.regError.set('');
+    this.regForm = {
+      rol: 'instructor',
+      numDoc: '',
+      nombre: '',
+      apellido: '',
+      correo: '',
+      password: '',
+      fichaId: '',
+    };
+    this.api.getFichas().subscribe(f => this.fichas.set(f ?? []));
+    this.showModal.set(true);
+  }
+
+  closeModal() {
+    this.showModal.set(false);
+  }
+
+  doRegister() {
+    this.regError.set('');
+    const data = { ...this.regForm };
+    if (!data.numDoc || !data.nombre || !data.correo || !data.password) {
+      this.regError.set('Completa los campos obligatorios');
+      return;
+    }
+    if (data.rol === 'aprendiz' && !data.fichaId) {
+      this.regError.set('Selecciona una ficha para el aprendiz');
+      return;
+    }
+    if (data.rol === 'instructor') {
+      data.fichaId = undefined;
+    }
+
+    this.regLoading.set(true);
+    this.auth.register(data).subscribe({
+      next: () => {
+        this.regLoading.set(false);
+        this.toast.success('Usuario registrado', `${data.nombre} fue creado correctamente.`);
+        this.closeModal();
+        this.loadAll();
+      },
+      error: (e) => {
+        this.regLoading.set(false);
+        this.regError.set(e?.error?.message ?? 'Error al registrar usuario');
+      },
     });
   }
 }

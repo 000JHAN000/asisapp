@@ -1,53 +1,77 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import { Competencia } from '../entities/competencia.entity';
 import { HorarioCG } from '../entities/horario-cg.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class CompetenciasService {
   constructor(
-    @InjectRepository(Competencia)
-    private readonly repo: Repository<Competencia>,
-    @InjectRepository(HorarioCG)
-    private readonly horarioRepo: Repository<HorarioCG>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+  private async getCompetenciaRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, Competencia);
   }
 
-  create(data: Partial<Competencia>) {
-    const entity = this.repo.create(data);
-    return this.repo.save(entity);
+  private async getHorarioRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, HorarioCG);
+  }
+
+  async findAll() {
+    const repo = await this.getCompetenciaRepo();
+    return repo.find();
+  }
+
+  async findOne(id: string) {
+    const repo = await this.getCompetenciaRepo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async create(data: Partial<Competencia>) {
+    const repo = await this.getCompetenciaRepo();
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async update(id: string, data: Partial<Competencia>) {
-    await this.repo.update(id, data);
+    const repo = await this.getCompetenciaRepo();
+    await repo.update(id, data);
     return this.findOne(id);
   }
 
   async remove(id: string) {
+    const repo = await this.getCompetenciaRepo();
     const entity = await this.findOne(id);
     if (!entity) throw new NotFoundException('Competencia no encontrada');
-    return this.repo.remove(entity);
+    return repo.remove(entity);
   }
 
-  findByHorario(horarioId: string) {
-    return this.repo.find({ where: { horarioId } });
+  async findByHorario(horarioId: string) {
+    const repo = await this.getCompetenciaRepo();
+    return repo.find({ where: { horarioId } });
   }
 
   async findByInstructor(instructorId: string) {
-    const horarios = await this.horarioRepo.find({
+    const [compRepo, horarioRepo] = await Promise.all([
+      this.getCompetenciaRepo(),
+      this.getHorarioRepo(),
+    ]);
+    const horarios = await horarioRepo.find({
       where: { instructorId },
       select: ['id'],
     });
     if (!horarios.length) return [];
     const horarioIds = horarios.map((h) => h.id);
-    return this.repo.find({ where: { horarioId: In(horarioIds) } });
+    return compRepo.find({ where: { horarioId: In(horarioIds) } });
   }
 }

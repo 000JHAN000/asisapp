@@ -1,31 +1,52 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { AsistenciaSesionOrmEntity } from '../infrastructure/entities/asistencia-sesion.orm-entity';
-import { AsistenciaRegistroOrmEntity } from '../infrastructure/entities/asistencia-registro.orm-entity';
-import { FormacionAsistenciaOrmEntity } from '../infrastructure/entities/formacion-asistencia.orm-entity';
+import { In } from 'typeorm';
+import { AsistenciaSesionTenantEntity } from '../infrastructure/entities/tenant/asistencia-sesion.tenant-entity';
+import { AsistenciaRegistroTenantEntity } from '../infrastructure/entities/tenant/asistencia-registro.tenant-entity';
+import { FormacionAsistenciaTenantEntity } from '../infrastructure/entities/tenant/formacion-asistencia.tenant-entity';
 import { HorarioCG } from '../../chronogest/entities/horario-cg.entity';
 import { AprendizCG } from '../../chronogest/entities/aprendiz-cg.entity';
 import { CreateAsistenciaSesionDto } from '../infrastructure/http/dto/create-asistencia-sesion.dto';
 import { readFileToBase64Async } from '../../chronogest/utils/file-storage.util';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class AsistenciaSesionService {
   constructor(
-    @InjectRepository(AsistenciaSesionOrmEntity)
-    private readonly sesionRepo: Repository<AsistenciaSesionOrmEntity>,
-    @InjectRepository(AsistenciaRegistroOrmEntity)
-    private readonly registroRepo: Repository<AsistenciaRegistroOrmEntity>,
-    @InjectRepository(HorarioCG)
-    private readonly horarioRepo: Repository<HorarioCG>,
-    @InjectRepository(AprendizCG)
-    private readonly aprendizRepo: Repository<AprendizCG>,
-    @InjectRepository(FormacionAsistenciaOrmEntity)
-    private readonly formacionRepo: Repository<FormacionAsistenciaOrmEntity>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
+  }
+
+  private async getSesionRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaSesionTenantEntity);
+  }
+
+  private async getRegistroRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaRegistroTenantEntity);
+  }
+
+  private async getFormacionRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, FormacionAsistenciaTenantEntity);
+  }
+
+  private async getHorarioRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, HorarioCG);
+  }
+
+  private async getAprendizRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AprendizCG);
+  }
+
   async create(dto: CreateAsistenciaSesionDto, instructorId: string) {
-    const horario = await this.horarioRepo.findOne({ where: { id: dto.horarioId } });
+    const horarioRepo = await this.getHorarioRepo();
+    const horario = await horarioRepo.findOne({ where: { id: dto.horarioId } });
     if (!horario) throw new BadRequestException('Horario no encontrado');
 
     const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
@@ -45,49 +66,48 @@ export class AsistenciaSesionService {
       throw new BadRequestException('La fecha de la sesión debe ser hoy');
     }
 
-    // Buscar o crear formación de asistencia legacy vinculada a este horario ChronoGest
-    let formacion = await this.formacionRepo.findOne({
+    const formacionRepo = await this.getFormacionRepo();
+    let formacion = await formacionRepo.findOne({
       where: {
         cgHorarioId: dto.horarioId,
         fecha: new Date(dto.fecha),
       },
     });
     if (!formacion) {
-      formacion = this.formacionRepo.create({
+      formacion = formacionRepo.create({
         cgHorarioId: dto.horarioId,
         fecha: new Date(dto.fecha),
         hora_inicio: dto.horaInicio,
         hora_fin: dto.horaFin,
       });
-      formacion = await this.formacionRepo.save(formacion);
+      formacion = await formacionRepo.save(formacion);
     }
 
-    // Cerrar sesiones activas previas del mismo horario
-    await this.sesionRepo.update(
+    const sesionRepo = await this.getSesionRepo();
+    await sesionRepo.update(
       { horarioId: dto.horarioId, estado: 'activa' },
       { estado: 'cerrada' },
     );
 
-    const sesion = this.sesionRepo.create({
+    const sesion = sesionRepo.create({
       ...dto,
       instructorId,
       estado: 'activa',
       formacionAsistenciaId: formacion.id_formacion,
     });
-    return this.sesionRepo.save(sesion);
+    return sesionRepo.save(sesion);
   }
 
-  private async enrichRegistros(registros: AsistenciaRegistroOrmEntity[]) {
+  private async enrichRegistros(registros: AsistenciaRegistroTenantEntity[]) {
     if (registros.length === 0) return [];
 
-    // Una sola query para todos los aprendices
     const aprendizIds = [...new Set(registros.map((r) => r.aprendizId))];
-    const aprendices = await this.aprendizRepo.find({
+    const aprendizRepo = await this.getAprendizRepo();
+    const aprendices = await aprendizRepo.find({
       where: { id: In(aprendizIds) },
     });
     const aprendizMap = new Map(aprendices.map((a) => [a.id, a]));
 
-    // Paralelizar lecturas de archivos + enriquecimiento
     const enriched = await Promise.all(
       registros.map(async (r) => {
         const aprendiz = aprendizMap.get(r.aprendizId);
@@ -114,31 +134,37 @@ export class AsistenciaSesionService {
   }
 
   async findById(id: string) {
-    const sesion = await this.sesionRepo.findOne({ where: { id } });
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({ where: { id } });
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
-    
-    const registros = await this.registroRepo.find({ where: { sesionId: id } });
+
+    const registroRepo = await this.getRegistroRepo();
+    const registros = await registroRepo.find({ where: { sesionId: id } });
     const enrichedRegistros = await this.enrichRegistros(registros);
     return { ...sesion, registros: enrichedRegistros };
   }
 
   async findActivaByHorario(horarioId: string) {
-    const sesion = await this.sesionRepo.findOne({
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({
       where: { horarioId, estado: 'activa' },
     });
     if (!sesion) return null;
-    const registros = await this.registroRepo.find({ where: { sesionId: sesion.id } });
+    const registroRepo = await this.getRegistroRepo();
+    const registros = await registroRepo.find({ where: { sesionId: sesion.id } });
     const enrichedRegistros = await this.enrichRegistros(registros);
     return { ...sesion, registros: enrichedRegistros };
   }
 
   async findActivasByInstructor(instructorId: string) {
-    const sesiones = await this.sesionRepo.find({
+    const sesionRepo = await this.getSesionRepo();
+    const sesiones = await sesionRepo.find({
       where: { instructorId, estado: 'activa' },
     });
+    const registroRepo = await this.getRegistroRepo();
     const result: any[] = [];
     for (const sesion of sesiones) {
-      const registros = await this.registroRepo.find({ where: { sesionId: sesion.id } });
+      const registros = await registroRepo.find({ where: { sesionId: sesion.id } });
       const enrichedRegistros = await this.enrichRegistros(registros);
       result.push({ ...sesion, registros: enrichedRegistros });
     }
@@ -146,37 +172,43 @@ export class AsistenciaSesionService {
   }
 
   async findActivaByFicha(fichaId: string) {
-    // Buscar horarios de la ficha y luego sesiones activas
-    const sesion = await this.sesionRepo
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo
       .createQueryBuilder('sesion')
       .where('sesion.estado = :estado', { estado: 'activa' })
       .andWhere('sesion.horarioId IN (SELECT h.id::varchar FROM cg_horarios h WHERE h."fichaId" = :fichaId::varchar)', { fichaId })
       .getOne();
-    
+
     if (!sesion) return null;
-    const registros = await this.registroRepo.find({ where: { sesionId: sesion.id } });
+    const registroRepo = await this.getRegistroRepo();
+    const registros = await registroRepo.find({ where: { sesionId: sesion.id } });
     const enrichedRegistros = await this.enrichRegistros(registros);
     return { ...sesion, registros: enrichedRegistros };
   }
 
   async cerrar(id: string) {
-    const sesion = await this.sesionRepo.findOne({ where: { id } });
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({ where: { id } });
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
     sesion.estado = 'cerrada';
-    return this.sesionRepo.save(sesion);
+    return sesionRepo.save(sesion);
   }
 
   async getPendientes(sesionId: string) {
-    const sesion = await this.sesionRepo.findOne({ where: { id: sesionId } });
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({ where: { id: sesionId } });
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
 
-    const horario = await this.horarioRepo.findOne({ where: { id: sesion.horarioId } });
+    const horarioRepo = await this.getHorarioRepo();
+    const horario = await horarioRepo.findOne({ where: { id: sesion.horarioId } });
     if (!horario) return [];
 
-    const registros = await this.registroRepo.find({ where: { sesionId } });
+    const registroRepo = await this.getRegistroRepo();
+    const registros = await registroRepo.find({ where: { sesionId } });
     const aprendizIdsConRegistro = registros.map((r) => r.aprendizId);
 
-    const aprendices = await this.aprendizRepo.find({ where: { fichaId: horario.fichaId } });
+    const aprendizRepo = await this.getAprendizRepo();
+    const aprendices = await aprendizRepo.find({ where: { fichaId: horario.fichaId } });
     return aprendices.filter((a) => !aprendizIdsConRegistro.includes(a.id));
   }
 }

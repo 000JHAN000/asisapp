@@ -1,12 +1,10 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { FichasService } from '../services/fichas.service';
-import { Public } from 'src/auth/infrastructure/decorators/public.decorator';
 
 @Controller('fichas')
 export class FichasController {
   constructor(private readonly fichasService: FichasService) {}
 
-  @Public()
   @Get()
   findAll() {
     return this.fichasService.findAll();

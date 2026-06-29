@@ -3,6 +3,10 @@ import { type AsistenciaRepositoryPort, ASISTENCIA_REPOSITORY } from '../domain/
 import { CreateAsistenciaDto } from '../infrastructure/http/dto/create-asistencia.dto';
 import { UpdateAsistenciaDto } from '../infrastructure/http/dto/update-asistencia.dto';
 
+/**
+ * @deprecated Legacy: servicio sobre `asistencia` de `sena_db`.
+ * El flujo facial actual usa `AsistenciaSesionService` y `AsistenciaRegistroService`.
+ */
 @Injectable()
 export class AsistenciaService {
 

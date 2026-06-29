@@ -2,20 +2,9 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
+import { TenantModule } from '../infrastructure/persistence/tenants/tenant.module';
 
-import { Ficha } from './entities/ficha.entity';
-import { AmbienteCG } from './entities/ambiente-cg.entity';
-import { InstructorCG } from './entities/instructor-cg.entity';
-import { AprendizCG } from './entities/aprendiz-cg.entity';
-import { AdminCG } from './entities/admin-cg.entity';
 import { UsuarioCG } from './entities/usuario-cg.entity';
-import { HorarioCG } from './entities/horario-cg.entity';
-import { Competencia } from './entities/competencia.entity';
-import { Evento } from './entities/evento.entity';
-import { SolicitudCambio } from './entities/solicitud-cambio.entity';
-import { Notificacion } from './entities/notificacion.entity';
-import { ConfiguracionApp } from './entities/configuracion-app.entity';
-import { Ubicacion } from './entities/ubicacion.entity';
 
 import { CentroFormacionOrmEntity } from '../centro-formacion/infrastructure/entities/centro-formacion.orm-entity';
 import { SedeOrmEntity } from '../sede/infrastructure/entities/sede.orm-entity';
@@ -37,6 +26,7 @@ import { RolOrmEntity } from '../rol/infrastructure/entities/rol.orm-entity';
 import { AmbienteOrmEntity } from '../ambiente/infrastructure/entities/ambiente.orm-entity';
 
 import { AuthCGController } from './controllers/auth-cg.controller';
+import { UsuariosCGController } from './controllers/usuarios-cg.controller';
 import { FichasController } from './controllers/fichas.controller';
 import { AmbientesController } from './controllers/ambientes.controller';
 import { InstructoresController } from './controllers/instructores.controller';
@@ -54,6 +44,7 @@ import { FormativoController } from './controllers/formativo.controller';
 import { HorariosAdminController } from './controllers/horarios-admin.controller';
 
 import { AuthCGService } from './services/auth-cg.service';
+import { UsuariosCGService } from './services/usuarios-cg.service';
 import { FichasService } from './services/fichas.service';
 import { AmbientesService } from './services/ambientes.service';
 import { InstructoresService } from './services/instructores.service';
@@ -73,12 +64,11 @@ import { HorariosAdminService } from './services/horarios-admin.service';
   imports: [
     JwtModule.register({}),
     HttpModule,
+    TenantModule,
     TypeOrmModule.forFeature([
-      // Entidades internas de chronogest
-      Ficha, AmbienteCG, InstructorCG, AprendizCG, AdminCG, UsuarioCG,
-      HorarioCG, Competencia, Evento, SolicitudCambio, Notificacion,
-      ConfiguracionApp, Ubicacion,
-      // Entidades externas para FormativoService
+      // UsuarioCG vive en sena_db y se usa para autenticación/asignación de sede.
+      UsuarioCG,
+      // Entidades externas (legacy) requeridas por FormativoService.
       CentroFormacionOrmEntity, SedeOrmEntity, DepartamentoOrmEntity,
       MunicipioOrmEntity, AreaOrmEntity, ProgramaOrmEntity, PersonaOrmEntity,
       CursoOrmEntity, MatriculaOrmEntity, AplicativoOrmEntity, ModuloOrmEntity,
@@ -87,14 +77,14 @@ import { HorariosAdminService } from './services/horarios-admin.service';
     ]),
   ],
   controllers: [
-    AuthCGController, FichasController, AmbientesController,
+    AuthCGController, UsuariosCGController, FichasController, AmbientesController,
     InstructoresController, AprendicesController, AdministradoresController,
     HorariosController, CompetenciasController, EventosController,
     SolicitudesController, NotificacionesController, ConfiguracionController,
     UbicacionesController, UploadController, FormativoController, HorariosAdminController,
   ],
   providers: [
-    AuthCGService, FichasService, AmbientesService,
+    AuthCGService, UsuariosCGService, FichasService, AmbientesService,
     InstructoresService, AprendicesService, AdministradoresService,
     HorariosService, CompetenciasService, EventosService,
     SolicitudesService, NotificacionesService, ConfiguracionService,

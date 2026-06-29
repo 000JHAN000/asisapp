@@ -1,36 +1,52 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Evento } from '../entities/evento.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class EventosService {
   constructor(
-    @InjectRepository(Evento)
-    private readonly repo: Repository<Evento>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, Evento);
   }
 
-  create(data: Partial<Evento>) {
-    const entity = this.repo.create(data);
-    return this.repo.save(entity);
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async findOne(id: string) {
+    const repo = await this.getRepo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async create(data: Partial<Evento>) {
+    const repo = await this.getRepo();
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async update(id: string, data: Partial<Evento>) {
-    await this.repo.update(id, data);
+    const repo = await this.getRepo();
+    await repo.update(id, data);
     return this.findOne(id);
   }
 
   async remove(id: string) {
+    const repo = await this.getRepo();
     const entity = await this.findOne(id);
     if (!entity) throw new NotFoundException('Evento no encontrado');
-    return this.repo.remove(entity);
+    return repo.remove(entity);
   }
 }

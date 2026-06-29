@@ -5,6 +5,10 @@ import { UpdateFormacionAsistenciaDto } from './dto/update-formacion-asistencia.
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
 import { CheckTenant } from 'src/auth/infrastructure/guards/tenant.guard';
 
+/**
+ * @deprecated Legacy: opera sobre `formacion_asistencia` de `sena_db`.
+ * El flujo facial actual no utiliza este recurso.
+ */
 @CheckTenant()
 @Controller('formacion-asistencia')
 export class FormacionAsistenciaController {

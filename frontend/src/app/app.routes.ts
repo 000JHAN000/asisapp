@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard, roleGuard } from './core/guards/auth.guard';
+import { superAdminGuard } from './core/guards/super-admin.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'landing', pathMatch: 'full' },
@@ -163,6 +164,24 @@ export const routes: Routes = [
         path: 'horarios',
         loadComponent: () =>
           import('./features/horarios/dev/horarios-admin.component').then((m) => m.HorariosAdminComponent),
+      },
+    ],
+  },
+  // ── Super Admin ──────────────────────────────────────────────────────────
+  {
+    path: 'super-admin',
+    children: [
+      { path: '', redirectTo: 'tenants', pathMatch: 'full' },
+      {
+        path: 'login',
+        loadComponent: () =>
+          import('./features/super-admin/login/super-admin-login.component').then((m) => m.SuperAdminLoginComponent),
+      },
+      {
+        path: 'tenants',
+        canActivate: [superAdminGuard],
+        loadComponent: () =>
+          import('./features/super-admin/tenants/super-admin-tenants.component').then((m) => m.SuperAdminTenantsComponent),
       },
     ],
   },

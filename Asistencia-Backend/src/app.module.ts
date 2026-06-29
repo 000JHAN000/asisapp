@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -9,6 +9,7 @@ import { AuthModule }          from './auth/auth.module';
 import { JwtGuard }            from './auth/infrastructure/guards/jwt.guard';
 import { TenantGuard }         from './auth/infrastructure/guards/tenant.guard';
 import { RbacGuard }           from './auth/infrastructure/guards/rbac.guard';
+import { TenantMatchGuard }    from './auth/infrastructure/guards/tenant-match.guard';
 import { RolOrmEntity }        from './rol/infrastructure/entities/rol.orm-entity';
 import { DepartamentoModule }  from './departamento/departamento.module';
 import { MunicipioModule }     from './municipio/municipio.module';
@@ -32,6 +33,9 @@ import { QueuesModule } from './queues/queues.module';
 import { AsistenciaModule }    from './asistencia/asistencia.module';
 import { HorarioModule }       from './horario/horario.module';
 import { ChronogestModule }    from './chronogest/chronogest.module';
+import { TenantModule }          from './infrastructure/persistence/tenants/tenant.module';
+import { TenantMiddleware }      from './infrastructure/middleware/tenant.middleware';
+import { SuperAdminModule }      from './super-admin/super-admin.module';
 
 @Module({
   imports: [
@@ -50,7 +54,7 @@ import { ChronogestModule }    from './chronogest/chronogest.module';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
       }),
     }),
 
@@ -106,11 +110,24 @@ import { ChronogestModule }    from './chronogest/chronogest.module';
     HorarioModule,
     QueuesModule,
     ChronogestModule,
+    TenantModule,
+    SuperAdminModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: JwtGuard    },
-    { provide: APP_GUARD, useClass: RbacGuard   },
-    { provide: APP_GUARD, useClass: TenantGuard },
+    { provide: APP_GUARD, useClass: JwtGuard       },
+    { provide: APP_GUARD, useClass: TenantMatchGuard },
+    { provide: APP_GUARD, useClass: RbacGuard      },
+    { provide: APP_GUARD, useClass: TenantGuard    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(TenantMiddleware)
+      .exclude(
+        { path: 'tenants', method: RequestMethod.GET },
+        { path: 'super-admin/auth/login', method: RequestMethod.POST },
+      )
+      .forRoutes('*');
+  }
+}

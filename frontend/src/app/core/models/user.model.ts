@@ -10,6 +10,14 @@ export interface User {
   areaLiderada?: string;
   esTransversal?: boolean;
   fichaId?: number;
+  tenantSlug?: string | null;
+  tenantNombre?: string | null;
+}
+
+export interface Tenant {
+  id: string;
+  slug: string;
+  nombre: string;
 }
 
 export interface LoginResponse {

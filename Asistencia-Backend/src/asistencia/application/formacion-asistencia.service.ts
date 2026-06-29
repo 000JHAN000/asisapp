@@ -3,6 +3,9 @@ import { type FormacionAsistenciaRepositoryPort, FORMACION_ASISTENCIA_REPOSITORY
 import { CreateFormacionAsistenciaDto } from '../infrastructure/http/dto/create-formacion-asistencia.dto';
 import { UpdateFormacionAsistenciaDto } from '../infrastructure/http/dto/update-formacion-asistencia.dto';
 
+/**
+ * @deprecated Legacy: servicio sobre `formacion_asistencia` de `sena_db`.
+ */
 @Injectable()
 export class FormacionAsistenciaService {
 

@@ -2,20 +2,26 @@ import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs';
-import { User, LoginResponse } from '../models/user.model';
+import { User, LoginResponse, Tenant } from '../models/user.model';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly API = 'http://localhost:3001/api/auth';
   private readonly TOKEN_KEY = 'cg_token';
   private readonly USER_KEY = 'cg_user';
+  private readonly TENANT_KEY = 'cg_tenant';
 
   currentUser = signal<User | null>(this.loadUser());
+  currentTenant = signal<Tenant | null>(this.loadTenant());
 
   constructor(private http: HttpClient, private router: Router) {}
 
   get token(): string | null {
     return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  get tenantSlug(): string | null {
+    return this.currentTenant()?.slug ?? null;
   }
 
   get isAuthenticated(): boolean {
@@ -32,17 +38,24 @@ export class AuthService {
         localStorage.setItem(this.TOKEN_KEY, res.access_token);
         localStorage.setItem(this.USER_KEY, JSON.stringify(res.user));
         this.currentUser.set(res.user);
+        if (res.user.tenantSlug && res.user.tenantNombre) {
+          this.setTenant({ id: '', slug: res.user.tenantSlug, nombre: res.user.tenantNombre });
+        } else {
+          this.setTenant(null);
+        }
       }),
     );
   }
 
   logout() {
     const token = this.token;
-    
+
     const cleanupAndRedirect = () => {
       localStorage.removeItem(this.TOKEN_KEY);
       localStorage.removeItem(this.USER_KEY);
+      localStorage.removeItem(this.TENANT_KEY);
       this.currentUser.set(null);
+      this.currentTenant.set(null);
       this.router.navigate(['/landing']);
     };
 
@@ -83,8 +96,20 @@ export class AuthService {
     return this.http.get<User>(`${this.API}/me`).pipe(
       tap((user) => {
         this.currentUser.set({ ...this.currentUser()!, ...user });
+        if (user.tenantSlug && user.tenantNombre) {
+          this.setTenant({ id: '', slug: user.tenantSlug, nombre: user.tenantNombre });
+        }
       }),
     );
+  }
+
+  setTenant(tenant: Tenant | null) {
+    this.currentTenant.set(tenant);
+    if (tenant) {
+      localStorage.setItem(this.TENANT_KEY, JSON.stringify(tenant));
+    } else {
+      localStorage.removeItem(this.TENANT_KEY);
+    }
   }
 
   updateCurrentUser(partial: Partial<User>) {
@@ -96,6 +121,13 @@ export class AuthService {
   private loadUser(): User | null {
     try {
       const raw = localStorage.getItem(this.USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+
+  private loadTenant(): Tenant | null {
+    try {
+      const raw = localStorage.getItem(this.TENANT_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch { return null; }
   }

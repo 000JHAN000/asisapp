@@ -1,35 +1,51 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { AmbienteCG } from '../entities/ambiente-cg.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class AmbientesService {
   constructor(
-    @InjectRepository(AmbienteCG)
-    private readonly repo: Repository<AmbienteCG>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  create(data: any) {
-    return this.repo.save(data);
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AmbienteCG);
+  }
+
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async create(data: any) {
+    const repo = await this.getRepo();
+    return repo.save(data);
   }
 
   async update(id: string, data: any) {
-    await this.repo.update(id, data);
-    return this.repo.findOne({ where: { id } });
+    const repo = await this.getRepo();
+    await repo.update(id, data);
+    return repo.findOne({ where: { id } });
   }
 
   async remove(id: string) {
-    await this.repo.delete(id);
+    const repo = await this.getRepo();
+    await repo.delete(id);
     return { success: true };
   }
 
   async findDisponibilidad(dia: string, jornada: string) {
-    const ambientes = await this.repo.find();
+    const repo = await this.getRepo();
+    const ambientes = await repo.find();
     return ambientes.map((ambiente) => ({
       ...ambiente,
       disponible: true,
@@ -37,6 +53,7 @@ export class AmbientesService {
   }
 
   async findLibresAhora() {
-    return this.repo.find();
+    const repo = await this.getRepo();
+    return repo.find();
   }
 }

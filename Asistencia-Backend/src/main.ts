@@ -7,9 +7,9 @@ async function bootstrap() {
 
   // ✅ Agrega esto
   app.enableCors({
-    origin: 'http://localhost:4200',
+    origin: ['http://localhost:4200', 'http://admin.localhost:4200'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-aplicativo-id'],  // ✅ agregado
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-aplicativo-id', 'x-tenant-id'],
     credentials: true,
   });
   app.setGlobalPrefix('api');

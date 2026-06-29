@@ -3,6 +3,9 @@ import { type ConfiguracionAsistenciaRepositoryPort, CONFIGURACION_ASISTENCIA_RE
 import { CreateConfiguracionAsistenciaDto } from '../infrastructure/http/dto/create-configuracion-asistencia.dto';
 import { UpdateConfiguracionAsistenciaDto } from '../infrastructure/http/dto/update-configuracion-asistencia.dto';
 
+/**
+ * @deprecated Legacy: servicio sobre `configuracion_asistencia` de `sena_db`.
+ */
 @Injectable()
 export class ConfiguracionAsistenciaService {
 

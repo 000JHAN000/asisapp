@@ -4,38 +4,56 @@ import {
   ForbiddenException,
   HttpException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { AsistenciaRegistroOrmEntity } from '../infrastructure/entities/asistencia-registro.orm-entity';
-import { AsistenciaSesionOrmEntity } from '../infrastructure/entities/asistencia-sesion.orm-entity';
-import { AsistenciaOrmEntity } from '../infrastructure/entities/asistencia.orm-entity';
+import { AsistenciaRegistroTenantEntity } from '../infrastructure/entities/tenant/asistencia-registro.tenant-entity';
+import { AsistenciaSesionTenantEntity } from '../infrastructure/entities/tenant/asistencia-sesion.tenant-entity';
+import { AsistenciaTenantEntity } from '../infrastructure/entities/tenant/asistencia.tenant-entity';
 import { EstadoAsistencia } from '../domain/entities/asistencia.entity';
 import { CreateAsistenciaRegistroDto } from '../infrastructure/http/dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from '../infrastructure/http/dto/marcar-falla.dto';
 import { VerificarRostroDto } from '../infrastructure/http/dto/verificar-rostro.dto';
 import { AprendizCG } from '../../chronogest/entities/aprendiz-cg.entity';
 import { getBaseFacePath, getAttendanceFacePath, readFileToBase64, saveAttendanceFace } from '../../chronogest/utils/file-storage.util';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5000';
 
 @Injectable()
 export class AsistenciaRegistroService {
   constructor(
-    @InjectRepository(AsistenciaRegistroOrmEntity)
-    private readonly registroRepo: Repository<AsistenciaRegistroOrmEntity>,
-    @InjectRepository(AsistenciaSesionOrmEntity)
-    private readonly sesionRepo: Repository<AsistenciaSesionOrmEntity>,
-    @InjectRepository(AprendizCG)
-    private readonly aprendizRepo: Repository<AprendizCG>,
-    @InjectRepository(AsistenciaOrmEntity)
-    private readonly asistenciaRepo: Repository<AsistenciaOrmEntity>,
+    private readonly connectionManager: TenantConnectionManager,
     private readonly http: HttpService,
   ) {}
 
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new ForbiddenException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
+  }
+
+  private async getRegistroRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaRegistroTenantEntity);
+  }
+
+  private async getSesionRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaSesionTenantEntity);
+  }
+
+  private async getAsistenciaRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaTenantEntity);
+  }
+
+  private async getAprendizRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, AprendizCG);
+  }
+
   async verificarRostro(dto: VerificarRostroDto) {
-    const aprendiz = await this.aprendizRepo.findOne({
+    const aprendizRepo = await this.getAprendizRepo();
+    const aprendiz = await aprendizRepo.findOne({
       where: dto.documento ? { documento: dto.documento } : { id: dto.aprendizId }
     });
     if (!aprendiz) throw new NotFoundException('Aprendiz no encontrado');
@@ -82,42 +100,40 @@ export class AsistenciaRegistroService {
   }
 
   async registrarFirma(dto: CreateAsistenciaRegistroDto) {
-    const sesion = await this.sesionRepo.findOne({
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({
       where: { id: dto.sesionId },
     });
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
     if (sesion.estado !== 'activa') throw new ForbiddenException('La sesión no está activa');
 
-    // Verificar que el aprendiz no haya firmado ya
-    const existente = await this.registroRepo.findOne({
+    const registroRepo = await this.getRegistroRepo();
+    const existente = await registroRepo.findOne({
       where: { sesionId: dto.sesionId, aprendizId: dto.aprendizId },
     });
     if (existente) {
       throw new ForbiddenException('El aprendiz ya registró su asistencia');
     }
 
-    // Obtener aprendiz y su foto base
-    const aprendiz = await this.aprendizRepo.findOne({ 
-      where: dto.documento ? { documento: dto.documento } : { id: dto.aprendizId } 
+    const aprendizRepo = await this.getAprendizRepo();
+    const aprendiz = await aprendizRepo.findOne({
+      where: dto.documento ? { documento: dto.documento } : { id: dto.aprendizId }
     });
     if (!aprendiz) throw new NotFoundException('Aprendiz no encontrado');
     if (!aprendiz.facePhotoPath) {
       throw new ForbiddenException('El aprendiz no tiene rostro registrado');
     }
 
-    // ── Guardar foto de asistencia ─────────────────────────────────
-    // Nota: la verificación facial ya se hizo en /verificar-rostro
-    // para reducir demora, aquí solo guardamos el registro.
     let attendancePhotoPath: string | null = null;
     if (dto.faceVerificationImage) {
       attendancePhotoPath = saveAttendanceFace(aprendiz.id, dto.faceVerificationImage);
     }
 
-    // Buscar o crear asistencia legacy vinculada a la sesión y al aprendiz
     let asistenciaId: string | null = null;
     if (sesion.formacionAsistenciaId) {
       const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
-      let asistencia = await this.asistenciaRepo.findOne({
+      const asistenciaRepo = await this.getAsistenciaRepo();
+      let asistencia = await asistenciaRepo.findOne({
         where: {
           formacion_fk: sesion.formacionAsistenciaId,
           aprendizId: aprendiz.id,
@@ -126,10 +142,10 @@ export class AsistenciaRegistroService {
       if (asistencia) {
         asistencia.estado = EstadoAsistencia.asistio;
         asistencia.hora = horaActual;
-        asistencia = await this.asistenciaRepo.save(asistencia);
+        asistencia = await asistenciaRepo.save(asistencia);
       } else {
-        asistencia = await this.asistenciaRepo.save(
-          this.asistenciaRepo.create({
+        asistencia = await asistenciaRepo.save(
+          asistenciaRepo.create({
             formacion_fk: sesion.formacionAsistenciaId,
             aprendizId: aprendiz.id,
             estado: EstadoAsistencia.asistio,
@@ -140,8 +156,7 @@ export class AsistenciaRegistroService {
       asistenciaId = asistencia.id_asistencia;
     }
 
-    // Crear registro de firma
-    const registro = this.registroRepo.create({
+    const registro = registroRepo.create({
       sesionId: dto.sesionId,
       aprendizId: aprendiz.id,
       estado: 'presente',
@@ -153,12 +168,11 @@ export class AsistenciaRegistroService {
       asistenciaId,
     } as any);
 
-    const savedResult = await this.registroRepo.save(registro);
+    const savedResult = await registroRepo.save(registro);
     const saved = Array.isArray(savedResult) ? savedResult[0] : savedResult;
 
-    // Actualizar lastAttendancePhotoPath del aprendiz
     if (attendancePhotoPath) {
-      await this.aprendizRepo.update(aprendiz.id, {
+      await aprendizRepo.update(aprendiz.id, {
         lastAttendancePhotoPath: attendancePhotoPath,
       });
     }
@@ -188,20 +202,22 @@ export class AsistenciaRegistroService {
   }
 
   async marcarFallaJustificada(dto: MarcarFallaDto) {
-    const sesion = await this.sesionRepo.findOne({
+    const sesionRepo = await this.getSesionRepo();
+    const sesion = await sesionRepo.findOne({
       where: { id: dto.sesionId },
     });
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
 
-    const existente = await this.registroRepo.findOne({
+    const registroRepo = await this.getRegistroRepo();
+    const existente = await registroRepo.findOne({
       where: { sesionId: dto.sesionId, aprendizId: dto.aprendizId },
     });
 
-    // Buscar o crear asistencia legacy para falla justificada
     let asistenciaId: string | null = null;
     if (sesion.formacionAsistenciaId) {
       const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
-      let asistencia = await this.asistenciaRepo.findOne({
+      const asistenciaRepo = await this.getAsistenciaRepo();
+      let asistencia = await asistenciaRepo.findOne({
         where: {
           formacion_fk: sesion.formacionAsistenciaId,
           aprendizId: dto.aprendizId,
@@ -210,10 +226,10 @@ export class AsistenciaRegistroService {
       if (asistencia) {
         asistencia.estado = EstadoAsistencia.excusa;
         asistencia.hora = horaActual;
-        asistencia = await this.asistenciaRepo.save(asistencia);
+        asistencia = await asistenciaRepo.save(asistencia);
       } else {
-        asistencia = await this.asistenciaRepo.save(
-          this.asistenciaRepo.create({
+        asistencia = await asistenciaRepo.save(
+          asistenciaRepo.create({
             formacion_fk: sesion.formacionAsistenciaId,
             aprendizId: dto.aprendizId,
             estado: EstadoAsistencia.excusa,
@@ -229,10 +245,10 @@ export class AsistenciaRegistroService {
       existente.nota = dto.nota || undefined;
       existente.soporteUrl = dto.soporte || undefined;
       existente.asistenciaId = asistenciaId;
-      return this.registroRepo.save(existente);
+      return registroRepo.save(existente);
     }
 
-    const registro = this.registroRepo.create({
+    const registro = registroRepo.create({
       sesionId: dto.sesionId,
       aprendizId: dto.aprendizId,
       estado: 'falla_justificada',
@@ -240,6 +256,6 @@ export class AsistenciaRegistroService {
       soporteUrl: dto.soporte || undefined,
       asistenciaId,
     } as any);
-    return this.registroRepo.save(registro);
+    return registroRepo.save(registro);
   }
 }

@@ -1,45 +1,63 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { SolicitudCambio } from '../entities/solicitud-cambio.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class SolicitudesService {
   constructor(
-    @InjectRepository(SolicitudCambio)
-    private readonly repo: Repository<SolicitudCambio>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, SolicitudCambio);
   }
 
-  create(data: Partial<SolicitudCambio>) {
-    const entity = this.repo.create(data);
-    return this.repo.save(entity);
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async findOne(id: string) {
+    const repo = await this.getRepo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async create(data: Partial<SolicitudCambio>) {
+    const repo = await this.getRepo();
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async update(id: string, data: Partial<SolicitudCambio>) {
-    await this.repo.update(id, data);
+    const repo = await this.getRepo();
+    await repo.update(id, data);
     return this.findOne(id);
   }
 
   async remove(id: string) {
+    const repo = await this.getRepo();
     const entity = await this.findOne(id);
     if (!entity) throw new NotFoundException('Solicitud no encontrada');
-    return this.repo.remove(entity);
+    return repo.remove(entity);
   }
 
-  findByInstructor(instructorId: string) {
-    return this.repo.find({ where: { instructorId } });
+  async findByInstructor(instructorId: string) {
+    const repo = await this.getRepo();
+    return repo.find({ where: { instructorId } });
   }
 
-  countPendientes() {
-    return this.repo.count({ where: { estado: 'pendiente' } });
+  async countPendientes() {
+    const repo = await this.getRepo();
+    return repo.count({ where: { estado: 'pendiente' } });
   }
 
   async responder(
@@ -47,17 +65,19 @@ export class SolicitudesService {
     estado: 'aprobada' | 'rechazada',
     respuestaAdmin?: string,
   ) {
+    const repo = await this.getRepo();
     const solicitud = await this.findOne(id);
     if (!solicitud) throw new NotFoundException('Solicitud no encontrada');
     solicitud.estado = estado;
     if (respuestaAdmin !== undefined) solicitud.respuestaAdmin = respuestaAdmin;
-    return this.repo.save(solicitud);
+    return repo.save(solicitud);
   }
 
   async cancelar(id: string) {
+    const repo = await this.getRepo();
     const solicitud = await this.findOne(id);
     if (!solicitud) throw new NotFoundException('Solicitud no encontrada');
     solicitud.estado = 'cancelada';
-    return this.repo.save(solicitud);
+    return repo.save(solicitud);
   }
 }

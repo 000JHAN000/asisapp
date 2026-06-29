@@ -32,6 +32,7 @@ import { AprendizCG } from '../chronogest/entities/aprendiz-cg.entity';
 import { HorarioCG } from '../chronogest/entities/horario-cg.entity';
 
 import { QueuesModule } from 'src/queues/queues.module';
+import { TenantModule } from '../infrastructure/persistence/tenants/tenant.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { QueuesModule } from 'src/queues/queues.module';
       HorarioCG,
     ]),
     HttpModule,
+    TenantModule,
     forwardRef(() => QueuesModule),
   ],
   controllers: [

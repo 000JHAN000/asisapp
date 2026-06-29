@@ -1,56 +1,75 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Notificacion } from '../entities/notificacion.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class NotificacionesService {
   constructor(
-    @InjectRepository(Notificacion)
-    private readonly repo: Repository<Notificacion>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, Notificacion);
   }
 
-  create(data: Partial<Notificacion>) {
-    const entity = this.repo.create(data);
-    return this.repo.save(entity);
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async findOne(id: string) {
+    const repo = await this.getRepo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async create(data: Partial<Notificacion>) {
+    const repo = await this.getRepo();
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async update(id: string, data: Partial<Notificacion>) {
-    await this.repo.update(id, data);
+    const repo = await this.getRepo();
+    await repo.update(id, data);
     return this.findOne(id);
   }
 
   async remove(id: string) {
+    const repo = await this.getRepo();
     const entity = await this.findOne(id);
     if (!entity) throw new NotFoundException('Notificación no encontrada');
-    return this.repo.remove(entity);
+    return repo.remove(entity);
   }
 
-  findByDestinatario(destinatarioId?: string, destinatarioRol?: string) {
+  async findByDestinatario(destinatarioId?: string, destinatarioRol?: string) {
+    const repo = await this.getRepo();
     const where: any[] = [];
     if (destinatarioId) where.push({ destinatarioId });
     if (destinatarioRol) where.push({ destinatarioRol });
-    if (where.length === 0) return this.repo.find();
-    return this.repo.find({ where: where });
+    if (where.length === 0) return repo.find();
+    return repo.find({ where });
   }
 
   async marcarLeida(id: string) {
+    const repo = await this.getRepo();
     const notif = await this.findOne(id);
     if (!notif) throw new NotFoundException('Notificación no encontrada');
     notif.leida = true;
-    return this.repo.save(notif);
+    return repo.save(notif);
   }
 
   async marcarTodasLeidas(destinatarioRol: string) {
-    await this.repo.update({ destinatarioRol }, { leida: true });
+    const repo = await this.getRepo();
+    await repo.update({ destinatarioRol }, { leida: true });
     return { affected: true };
   }
 }

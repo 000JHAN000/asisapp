@@ -9,6 +9,8 @@ import { InstructorCG } from '../entities/instructor-cg.entity';
 import { AprendizCG } from '../entities/aprendiz-cg.entity';
 import { AdminCG } from '../entities/admin-cg.entity';
 import { ConfiguracionApp } from '../entities/configuracion-app.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class AuthCGService {
@@ -17,16 +19,33 @@ export class AuthCGService {
   constructor(
     @InjectRepository(UsuarioCG)
     private readonly usuarioRepo: Repository<UsuarioCG>,
-    @InjectRepository(InstructorCG)
-    private readonly instructorRepo: Repository<InstructorCG>,
-    @InjectRepository(AprendizCG)
-    private readonly aprendizRepo: Repository<AprendizCG>,
-    @InjectRepository(AdminCG)
-    private readonly adminRepo: Repository<AdminCG>,
-    @InjectRepository(ConfiguracionApp)
-    private readonly configRepo: Repository<ConfiguracionApp>,
     private readonly jwtService: JwtService,
+    private readonly tenantConnectionManager: TenantConnectionManager,
   ) {}
+
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new UnauthorizedException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
+  }
+
+  private async getInstructorRepo(tenantId?: string | null) {
+    return this.tenantConnectionManager.getTenantRepository(tenantId ?? this.tenantId, InstructorCG);
+  }
+
+  private async getAprendizRepo(tenantId?: string | null) {
+    return this.tenantConnectionManager.getTenantRepository(tenantId ?? this.tenantId, AprendizCG);
+  }
+
+  private async getAdminRepo(tenantId?: string | null) {
+    return this.tenantConnectionManager.getTenantRepository(tenantId ?? this.tenantId, AdminCG);
+  }
+
+  private async getConfigRepo(tenantId?: string | null) {
+    return this.tenantConnectionManager.getTenantRepository(tenantId ?? this.tenantId, ConfiguracionApp);
+  }
 
   async login(identifier: string, password: string) {
     const usuario = await this.usuarioRepo.findOne({
@@ -41,6 +60,22 @@ export class AuthCGService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
+    if (usuario.rol === 'super_admin') {
+      throw new UnauthorizedException('Los super administradores deben usar el panel de plataforma.');
+    }
+
+    if (!usuario.tenantSlug) {
+      throw new UnauthorizedException('No tienes una sede asignada. Contacta al administrador.');
+    }
+
+    let tenantNombre: string;
+    try {
+      const tenant = await this.tenantConnectionManager.resolveTenant(usuario.tenantSlug);
+      tenantNombre = tenant.nombre;
+    } catch {
+      throw new UnauthorizedException('La sede asignada al usuario no está registrada.');
+    }
+
     const valid = await compare(password, usuario.password);
     if (!valid) {
       throw new UnauthorizedException('Credenciales incorrectas');
@@ -48,11 +83,14 @@ export class AuthCGService {
 
     let perfil: any;
     if (usuario.rol === 'instructor') {
-      perfil = await this.instructorRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getInstructorRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
     } else if (usuario.rol === 'aprendiz') {
-      perfil = await this.aprendizRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getAprendizRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
     } else if (usuario.rol === 'admin') {
-      perfil = await this.adminRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getAdminRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
     }
 
     const payload = {
@@ -61,6 +99,8 @@ export class AuthCGService {
       documento: usuario.documento,
       rol: usuario.rol,
       perfilId: perfil?.id ?? null,
+      tenantSlug: usuario.tenantSlug,
+      tenantNombre,
     };
 
     const access_token = this.jwtService.sign(payload, {
@@ -79,6 +119,8 @@ export class AuthCGService {
         documento: usuario.documento,
         rol: usuario.rol,
         fichaId: perfil?.fichaId ?? null,
+        tenantSlug: usuario.tenantSlug,
+        tenantNombre,
       },
     };
   }
@@ -107,9 +149,14 @@ export class AuthCGService {
       esLider,
       areaLiderada,
       esTransversal,
+      tenantSlug,
     } = data;
 
     const documento = docOriginal || numDoc;
+
+    if (rol === 'super_admin') {
+      throw new BadRequestException('El rol super_admin no puede registrarse desde el login de sedes.');
+    }
 
     const exists = await this.usuarioRepo.findOne({
       where: [{ correo }, { documento }],
@@ -117,6 +164,16 @@ export class AuthCGService {
 
     if (exists) {
       throw new BadRequestException('Correo o documento ya registrado');
+    }
+
+    let resolvedTenantSlug: string | null = null;
+    if (tenantSlug) {
+      try {
+        await this.tenantConnectionManager.resolveTenant(tenantSlug);
+        resolvedTenantSlug = tenantSlug;
+      } catch {
+        throw new BadRequestException('La sede seleccionada no está registrada.');
+      }
     }
 
     const hashed = await hash(password, 10);
@@ -127,33 +184,40 @@ export class AuthCGService {
       password: hashed,
       rol,
       activo: true,
+      tenantSlug: resolvedTenantSlug,
     });
 
-    if (rol === 'instructor') {
-      await this.instructorRepo.save({
-        nombre,
-        apellido,
-        correo,
-        documento,
-        esLider: esLider ?? false,
-        areaLiderada,
-        esTransversal: esTransversal ?? false,
-      });
-    } else if (rol === 'aprendiz') {
-      await this.aprendizRepo.save({
-        nombre,
-        apellido,
-        correo,
-        documento,
-        fichaId,
-      });
-    } else if (rol === 'admin') {
-      await this.adminRepo.save({
-        nombre,
-        apellido,
-        correo,
-        documento,
-      });
+    // El perfil se crea en la BD del tenant asignado
+    if (resolvedTenantSlug) {
+      if (rol === 'instructor') {
+        const repo = await this.tenantConnectionManager.getTenantRepository(resolvedTenantSlug, InstructorCG);
+        await repo.save({
+          nombre,
+          apellido,
+          correo,
+          documento,
+          esLider: esLider ?? false,
+          areaLiderada,
+          esTransversal: esTransversal ?? false,
+        });
+      } else if (rol === 'aprendiz') {
+        const repo = await this.tenantConnectionManager.getTenantRepository(resolvedTenantSlug, AprendizCG);
+        await repo.save({
+          nombre,
+          apellido,
+          correo,
+          documento,
+          fichaId,
+        });
+      } else if (rol === 'admin') {
+        const repo = await this.tenantConnectionManager.getTenantRepository(resolvedTenantSlug, AdminCG);
+        await repo.save({
+          nombre,
+          apellido,
+          correo,
+          documento,
+        });
+      }
     }
 
     return {
@@ -163,12 +227,14 @@ export class AuthCGService {
         correo: usuario.correo,
         documento: usuario.documento,
         rol: usuario.rol,
+        tenantSlug: usuario.tenantSlug,
       },
     };
   }
 
   async verifyPin(pin: string) {
-    const config = await this.configRepo.findOne({ where: {} });
+    const configRepo = await this.getConfigRepo();
+    const config = await configRepo.findOne({ where: {} });
     return { valid: config?.pinRegistro === pin };
   }
 
@@ -192,11 +258,24 @@ export class AuthCGService {
 
     let perfil: any;
     if (usuario.rol === 'instructor') {
-      perfil = await this.instructorRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getInstructorRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
     } else if (usuario.rol === 'aprendiz') {
-      perfil = await this.aprendizRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getAprendizRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
     } else if (usuario.rol === 'admin') {
-      perfil = await this.adminRepo.findOne({ where: { documento: usuario.documento } });
+      const repo = await this.getAdminRepo(usuario.tenantSlug);
+      perfil = await repo.findOne({ where: { documento: usuario.documento } });
+    }
+
+    let tenantNombre: string | null = null;
+    if (usuario.tenantSlug) {
+      try {
+        const tenant = await this.tenantConnectionManager.resolveTenant(usuario.tenantSlug);
+        tenantNombre = tenant.nombre;
+      } catch {
+        tenantNombre = null;
+      }
     }
 
     return {
@@ -208,6 +287,8 @@ export class AuthCGService {
       documento: usuario.documento,
       rol: usuario.rol,
       fichaId: perfil?.fichaId ?? null,
+      tenantSlug: usuario.tenantSlug,
+      tenantNombre,
     };
   }
 }

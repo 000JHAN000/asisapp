@@ -5,6 +5,10 @@ import { UpdateConfiguracionAsistenciaDto } from './dto/update-configuracion-asi
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
 import { CheckTenant } from 'src/auth/infrastructure/guards/tenant.guard';
 
+/**
+ * @deprecated Legacy: opera sobre `configuracion_asistencia` de `sena_db`.
+ * El flujo facial actual no utiliza este recurso.
+ */
 @CheckTenant()
 @Controller('configuracion-asistencia')
 export class ConfiguracionAsistenciaController {

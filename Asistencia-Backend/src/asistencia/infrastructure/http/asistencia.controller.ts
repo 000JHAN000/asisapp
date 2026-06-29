@@ -6,6 +6,11 @@ import { UpdateAsistenciaDto } from './dto/update-asistencia.dto';
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
 import { CheckTenant } from 'src/auth/infrastructure/guards/tenant.guard';
 
+/**
+ * @deprecated Legacy: opera sobre la tabla `asistencia` de `sena_db`.
+ * El flujo facial actual usa `/asistencia/sesiones` y `/asistencia/registros`.
+ * Se mantiene solo por compatibilidad; se eliminará en una fase posterior.
+ */
 @CheckTenant()
 @Controller('asistencia')
 export class AsistenciaController {

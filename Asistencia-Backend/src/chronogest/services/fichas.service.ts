@@ -1,30 +1,45 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Ficha } from '../entities/ficha.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class FichasService {
   constructor(
-    @InjectRepository(Ficha)
-    private readonly repo: Repository<Ficha>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  create(data: any) {
-    return this.repo.save(data);
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, Ficha);
+  }
+
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async create(data: any) {
+    const repo = await this.getRepo();
+    return repo.save(data);
   }
 
   async update(id: string, data: any) {
-    await this.repo.update(id, data);
-    return this.repo.findOne({ where: { id } });
+    const repo = await this.getRepo();
+    await repo.update(id, data);
+    return repo.findOne({ where: { id } });
   }
 
   async remove(id: string) {
-    await this.repo.delete(id);
+    const repo = await this.getRepo();
+    await repo.delete(id);
     return { success: true };
   }
 }

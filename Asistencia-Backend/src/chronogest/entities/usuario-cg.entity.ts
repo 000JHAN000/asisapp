@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
 
-export type RolCG = 'admin' | 'instructor' | 'aprendiz';
+export type RolCG = 'super_admin' | 'admin' | 'instructor' | 'aprendiz';
 
 @Entity('cg_usuarios')
 export class UsuarioCG {
@@ -16,7 +16,7 @@ export class UsuarioCG {
   @Column({ type: 'varchar', length: 255 })
   password: string;
 
-  @Column({ type: 'enum', enum: ['admin', 'instructor', 'aprendiz'] })
+  @Column({ type: 'varchar', length: 20 })
   rol: RolCG;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
@@ -24,6 +24,9 @@ export class UsuarioCG {
 
   @Column({ type: 'boolean', default: true })
   activo: boolean;
+
+  @Column({ type: 'varchar', length: 64, nullable: true, name: 'tenant_slug' })
+  tenantSlug: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

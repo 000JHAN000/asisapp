@@ -1,11 +1,18 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Tenant } from '../models/user.model';
 
 const BASE = 'http://localhost:3001/api';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   constructor(private http: HttpClient) {}
+
+  // ── Tenants / Sedes ───────────────────────────────────────────
+  getTenants() { return this.http.get<Tenant[]>(`${BASE}/tenants`); }
+  updateTenant(documento: string, tenantSlug: string | null) {
+    return this.http.patch(`${BASE}/usuarios/tenant`, { documento, tenantSlug });
+  }
 
   // ── Fichas (horarios_db) ──────────────────────────────────────
   getFichas() { return this.http.get<any[]>(`${BASE}/fichas`); }

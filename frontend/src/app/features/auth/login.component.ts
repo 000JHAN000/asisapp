@@ -5,6 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
 import { LucideAngularModule } from 'lucide-angular';
 import { SearchableSelectComponent, SSOption } from '../../shared/components/searchable-select.component';
+import { Tenant } from '../../core/models/user.model';
 
 type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset-pass';
 
@@ -83,6 +84,9 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
           <div class="login-links">
             <button class="link-btn" (click)="goToPin()">¿No tienes acceso? Registrarse</button>
           </div>
+          <div class="login-links">
+            <a routerLink="/super-admin/login" class="link-btn">Acceso super administrador</a>
+          </div>
         </div>
         }
 
@@ -158,6 +162,12 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
               <span class="role-name">{{ r.label }}</span>
             </div>
             }
+          </div>
+
+          <!-- Sede -->
+          <div class="form-group mt-4">
+            <label class="form-label">Sede *</label>
+            <app-ss [options]="tenantOpts()" placeholder="Seleccionar sede..." [(ngModel)]="regForm.tenantSlug"></app-ss>
           </div>
 
           <div class="grid-2 mt-4">
@@ -391,12 +401,13 @@ export class LoginComponent {
 
   // Register
   regRol = 'aprendiz';
-  regForm: any = { tipoDoc: 'CC', genero: '' };
+  regForm: any = { tipoDoc: 'CC', genero: '', tenantSlug: '' };
   regError = signal('');
   regSuccess = signal('');
   fichas = signal<any[]>([]);
   areas = signal<string[]>([]);
   municipios = signal<any[]>([]);
+  tenants = signal<Tenant[]>([]);
   searchFicha = '';
   areaFiltroReg = '';
 
@@ -432,6 +443,14 @@ export class LoginComponent {
     ...this.filteredFichas().map(f => ({
       value: f.id,
       label: `${f.codigo} — ${f.programa}`
+    }))
+  ]);
+
+  tenantOpts = computed<SSOption[]>(() => [
+    { value: '', label: 'Seleccionar sede...' },
+    ...this.tenants().map(t => ({
+      value: t.slug,
+      label: t.nombre
     }))
   ]);
 
@@ -479,7 +498,7 @@ export class LoginComponent {
     this.regForm = {
       nombre: '', apellido: '', tipoDoc: 'CC', numDoc: '',
       correo: '', password: '', telefono: '', municipio: '',
-      genero: '', fichaId: ''
+      genero: '', fichaId: '', tenantSlug: ''
     };
     this.searchFicha = '';
     this.areaFiltroReg = '';
@@ -502,7 +521,12 @@ export class LoginComponent {
       },
       error: (e) => {
         this.loading.set(false);
-        this.error.set(e?.error?.message ?? 'Credenciales inválidas');
+        const msg = e?.error?.message ?? 'Credenciales inválidas';
+        if (typeof msg === 'string' && msg.toLowerCase().includes('super administradores')) {
+          this.router.navigate(['/super-admin/login']);
+          return;
+        }
+        this.error.set(msg);
       },
     });
   }
@@ -516,6 +540,7 @@ export class LoginComponent {
         if (res.valid) {
           this.loadFichas();
           this.loadMunicipios();
+          this.loadTenants();
           this.view.set('register');
         } else {
           this.pinError.set('PIN incorrecto');
@@ -543,11 +568,21 @@ export class LoginComponent {
     });
   }
 
+  loadTenants() {
+    this.api.getTenants().subscribe({
+      next: (t) => this.tenants.set(t ?? []),
+      error: () => this.tenants.set([]),
+    });
+  }
+
   doRegister() {
     this.regError.set('');
     const data = { ...this.regForm, rol: this.regRol };
     if (!data.nombre || !data.apellido || !data.numDoc || !data.correo || !data.password) {
       this.regError.set('Completa todos los campos obligatorios'); return;
+    }
+    if (!data.tenantSlug) {
+      this.regError.set('Por favor, selecciona una sede.'); return;
     }
     if (this.regRol === 'aprendiz' && !data.fichaId) {
       this.regError.set('Por favor, selecciona a qué Ficha o Curso perteneces para poder registrarte.'); return;

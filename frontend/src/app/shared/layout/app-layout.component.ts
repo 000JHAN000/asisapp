@@ -2,6 +2,7 @@ import { Component, computed, signal, OnDestroy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
+import { Tenant } from '../../core/models/user.model';
 import { ThemeService } from '../../core/services/theme.service';
 import { ApiService } from '../../core/services/api.service';
 import { HttpClient } from '@angular/common/http';
@@ -83,6 +84,12 @@ import { ToastComponent } from '../components/toast.component';
               <span>SENA Colombia</span>
             </div>
             <span class="header-sub">Sistema de Gestión</span>
+            @if (tenant()) {
+              <span class="tenant-badge">
+                <lucide-icon name="building-2" [size]="12"></lucide-icon>
+                {{ tenant()?.nombre }}
+              </span>
+            }
           </div>
 
           <div class="header-right">
@@ -368,6 +375,12 @@ import { ToastComponent } from '../components/toast.component';
       filter: none;
     }
     .header-sub { font-size: 11px; color: var(--text-muted); }
+    .tenant-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 4px; padding: 3px 10px; border-radius: 99px;
+      background: var(--navy); color: #fff; font-size: 11px; font-weight: 700;
+      width: fit-content;
+    }
     .header-right { display: flex; align-items: center; gap: 8px; position: relative; }
     .icon-btn {
       width: 36px; height: 36px; border-radius: 8px; border: none;
@@ -506,6 +519,8 @@ export class AppLayoutComponent implements OnDestroy {
     return 'Aprendiz';
   });
 
+  tenant = signal<Tenant | null>(null);
+
   expandedMenus = signal<Record<string, boolean>>({});
   private _routerSub: Subscription | null = null;
 
@@ -568,6 +583,21 @@ export class AppLayoutComponent implements OnDestroy {
     private http: HttpClient,
     private router: Router,
   ) {
+    // La sede puede venir del signal (login reciente) o de localStorage (recarga de página).
+    let tenant = this.auth.currentTenant();
+    if (!tenant) {
+      try {
+        const raw = localStorage.getItem('cg_tenant');
+        tenant = raw ? JSON.parse(raw) : null;
+        if (tenant) this.auth.setTenant(tenant);
+      } catch { /* ignore */ }
+    }
+    this.tenant.set(tenant);
+    if (!this.tenant()) {
+      this.auth.logout();
+      return;
+    }
+
     if (this.role() === 'admin') {
       this.loadPendientes();
       // Refresca alertas automáticamente cada 30s para admin

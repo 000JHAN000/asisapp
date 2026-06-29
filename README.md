@@ -409,15 +409,29 @@ Chronogest-2.1-V/
 ├── backend/           NestJS 11  — http://localhost:3001/api
 ├── docker-compose.yml Orquestador de servicios
 └── docker/
-    └── mysql/
-        ├── init.sql                    Crea las BDs al iniciar
-        ├── 02_horarios_db.sql          Backup de datos (generado)
-        └── 02_proyecto_formativo_db.sql Backup datos SENA (generado)
+    ├── mysql/              Scripts legacy de MySQL
+    └── postgres/init/      Scripts de inicialización PostgreSQL
+        ├── 01-create-tenant-dbs.sql      # Crea BDs por sede
+        ├── 02-create-tenants-table.sql   # Catálogo maestro de sedes
+        └── 03-migrate-users-tenant.sql   # Usuarios existentes -> Yamborot
 ```
 
 **Base de datos:**
-- `horarios_db` — Datos del sistema ChronoGest (instructores, fichas, horarios, etc.)
-- `proyecto_formativo_db` — Datos del sistema SENA (municipios, programas, personas, etc.)
+- `sena_db` — BD maestra. Contiene el catálogo de tenants/sedes en la tabla `tenants` y los usuarios en `cg_usuarios`.
+- `sena_db_yamborot` — BD de la sede Yamborot (Database-per-Tenant).
+- `sena_db_centro_comercio` — BD de la sede Centro Comercio y Servicio (Database-per-Tenant).
+
+> **Nota:** actualmente el catálogo de sedes y las BDs físicas están creadas, pero los repositorios de negocio siguen usando `sena_db`. El aislamiento completo por sede se activará en una fase posterior.
+>
+> **Aplicar en un entorno existente:** los scripts de `docker/postgres/init` solo se ejecutan automáticamente la primera vez que se crea el volumen de PostgreSQL. Si ya tienes datos, ejecuta manualmente los scripts o haz `docker-compose down -v` para recrear todo (⚠️ borra los datos actuales).
+
+**Sede asignada por usuario:**
+- Cada usuario tiene una sede asignada en el campo `tenant_slug` de `cg_usuarios`.
+- **Usuarios existentes**: migrados a `yamborot` por defecto.
+- **Nuevos usuarios**: se registran sin sede. El administrador debe asignarles una sede desde la pantalla **Usuarios** para que puedan iniciar sesión.
+- El login detecta automáticamente la sede del usuario; no hay selector en el login.
+- El frontend envía el header `x-tenant-id` en cada petición.
+- El nombre de la sede se muestra como un badge en la barra superior.
 
 **Roles de usuario:**
 - **Administrador** — Acceso completo al sistema

@@ -1,5 +1,4 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 
 import { Ficha } from '../entities/ficha.entity';
@@ -14,220 +13,290 @@ import { SolicitudCambio } from '../entities/solicitud-cambio.entity';
 import { Notificacion } from '../entities/notificacion.entity';
 import { ConfiguracionApp } from '../entities/configuracion-app.entity';
 
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
+
 @Injectable()
 export class HorariosAdminService {
   constructor(
-    @InjectRepository(Ficha)
-    private readonly fichaRepo: Repository<Ficha>,
-    @InjectRepository(InstructorCG)
-    private readonly instructorRepo: Repository<InstructorCG>,
-    @InjectRepository(AprendizCG)
-    private readonly aprendizRepo: Repository<AprendizCG>,
-    @InjectRepository(AdminCG)
-    private readonly adminRepo: Repository<AdminCG>,
-    @InjectRepository(AmbienteCG)
-    private readonly ambienteRepo: Repository<AmbienteCG>,
-    @InjectRepository(HorarioCG)
-    private readonly horarioRepo: Repository<HorarioCG>,
-    @InjectRepository(Competencia)
-    private readonly competenciaRepo: Repository<Competencia>,
-    @InjectRepository(Evento)
-    private readonly eventoRepo: Repository<Evento>,
-    @InjectRepository(SolicitudCambio)
-    private readonly solicitudRepo: Repository<SolicitudCambio>,
-    @InjectRepository(Notificacion)
-    private readonly notificacionRepo: Repository<Notificacion>,
-    @InjectRepository(ConfiguracionApp)
-    private readonly configRepo: Repository<ConfiguracionApp>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
+  }
+
+  private async getRepo(entity: any) {
+    return this.connectionManager.getTenantRepository(this.tenantId, entity);
+  }
+
   // ─── Administradores ───
-  findAllAdmins() {
-    return this.adminRepo.find();
+  async findAllAdmins() {
+    const repo = await this.getRepo(AdminCG);
+    return repo.find();
   }
-  findOneAdmin(id: string) {
-    return this.adminRepo.findOneBy({ id });
+
+  async findOneAdmin(id: string) {
+    const repo = await this.getRepo(AdminCG);
+    return repo.findOneBy({ id });
   }
-  createAdmin(data: Partial<AdminCG>) {
-    return this.adminRepo.save(data);
+
+  async createAdmin(data: Partial<AdminCG>) {
+    const repo = await this.getRepo(AdminCG);
+    return repo.save(data);
   }
-  updateAdmin(id: string, data: Partial<AdminCG>) {
-    return this.adminRepo.update({ id }, data);
+
+  async updateAdmin(id: string, data: Partial<AdminCG>) {
+    const repo = await this.getRepo(AdminCG);
+    return repo.update({ id }, data);
   }
-  removeAdmin(id: string) {
-    return this.adminRepo.delete({ id });
+
+  async removeAdmin(id: string) {
+    const repo = await this.getRepo(AdminCG);
+    return repo.delete({ id });
   }
 
   // ─── Instructores ───
-  findAllInstructores() {
-    return this.instructorRepo.find();
+  async findAllInstructores() {
+    const repo = await this.getRepo(InstructorCG);
+    return repo.find();
   }
-  findOneInstructor(id: string) {
-    return this.instructorRepo.findOneBy({ id });
+
+  async findOneInstructor(id: string) {
+    const repo = await this.getRepo(InstructorCG);
+    return repo.findOneBy({ id });
   }
-  createInstructor(data: Partial<InstructorCG>) {
-    return this.instructorRepo.save(data);
+
+  async createInstructor(data: Partial<InstructorCG>) {
+    const repo = await this.getRepo(InstructorCG);
+    return repo.save(data);
   }
-  updateInstructor(id: string, data: Partial<InstructorCG>) {
-    return this.instructorRepo.update({ id }, data);
+
+  async updateInstructor(id: string, data: Partial<InstructorCG>) {
+    const repo = await this.getRepo(InstructorCG);
+    return repo.update({ id }, data);
   }
-  removeInstructor(id: string) {
-    return this.instructorRepo.delete({ id });
+
+  async removeInstructor(id: string) {
+    const repo = await this.getRepo(InstructorCG);
+    return repo.delete({ id });
   }
 
   // ─── Aprendices ───
-  findAllAprendices() {
-    return this.aprendizRepo.find();
+  async findAllAprendices() {
+    const repo = await this.getRepo(AprendizCG);
+    return repo.find();
   }
-  findOneAprendiz(id: string) {
-    return this.aprendizRepo.findOneBy({ id });
+
+  async findOneAprendiz(id: string) {
+    const repo = await this.getRepo(AprendizCG);
+    return repo.findOneBy({ id });
   }
-  createAprendiz(data: Partial<AprendizCG>) {
-    return this.aprendizRepo.save(data);
+
+  async createAprendiz(data: Partial<AprendizCG>) {
+    const repo = await this.getRepo(AprendizCG);
+    return repo.save(data);
   }
-  updateAprendiz(id: string, data: Partial<AprendizCG>) {
-    return this.aprendizRepo.update({ id }, data);
+
+  async updateAprendiz(id: string, data: Partial<AprendizCG>) {
+    const repo = await this.getRepo(AprendizCG);
+    return repo.update({ id }, data);
   }
-  removeAprendiz(id: string) {
-    return this.aprendizRepo.delete({ id });
+
+  async removeAprendiz(id: string) {
+    const repo = await this.getRepo(AprendizCG);
+    return repo.delete({ id });
   }
 
   // ─── Fichas ───
-  findAllFichas() {
-    return this.fichaRepo.find();
+  async findAllFichas() {
+    const repo = await this.getRepo(Ficha);
+    return repo.find();
   }
-  findOneFicha(id: string) {
-    return this.fichaRepo.findOneBy({ id });
+
+  async findOneFicha(id: string) {
+    const repo = await this.getRepo(Ficha);
+    return repo.findOneBy({ id });
   }
-  createFicha(data: Partial<Ficha>) {
-    return this.fichaRepo.save(data);
+
+  async createFicha(data: Partial<Ficha>) {
+    const repo = await this.getRepo(Ficha);
+    return repo.save(data);
   }
-  updateFicha(id: string, data: Partial<Ficha>) {
-    return this.fichaRepo.update({ id }, data);
+
+  async updateFicha(id: string, data: Partial<Ficha>) {
+    const repo = await this.getRepo(Ficha);
+    return repo.update({ id }, data);
   }
-  removeFicha(id: string) {
-    return this.fichaRepo.delete({ id });
+
+  async removeFicha(id: string) {
+    const repo = await this.getRepo(Ficha);
+    return repo.delete({ id });
   }
-  findFichasOpts() {
-    return this.fichaRepo.find({ select: ['id', 'codigo'] });
+
+  async findFichasOpts() {
+    const repo = await this.getRepo(Ficha);
+    return repo.find({ select: ['id', 'codigo'] });
   }
 
   // ─── Ambientes ───
-  findAllAmbientes() {
-    return this.ambienteRepo.find();
+  async findAllAmbientes() {
+    const repo = await this.getRepo(AmbienteCG);
+    return repo.find();
   }
-  findOneAmbiente(id: string) {
-    return this.ambienteRepo.findOneBy({ id });
+
+  async findOneAmbiente(id: string) {
+    const repo = await this.getRepo(AmbienteCG);
+    return repo.findOneBy({ id });
   }
-  createAmbiente(data: Partial<AmbienteCG>) {
-    return this.ambienteRepo.save(data);
+
+  async createAmbiente(data: Partial<AmbienteCG>) {
+    const repo = await this.getRepo(AmbienteCG);
+    return repo.save(data);
   }
-  updateAmbiente(id: string, data: Partial<AmbienteCG>) {
-    return this.ambienteRepo.update({ id }, data);
+
+  async updateAmbiente(id: string, data: Partial<AmbienteCG>) {
+    const repo = await this.getRepo(AmbienteCG);
+    return repo.update({ id }, data);
   }
-  removeAmbiente(id: string) {
-    return this.ambienteRepo.delete({ id });
+
+  async removeAmbiente(id: string) {
+    const repo = await this.getRepo(AmbienteCG);
+    return repo.delete({ id });
   }
 
   // ─── Horarios ───
-  findAllHorarios() {
-    return this.horarioRepo.find();
+  async findAllHorarios() {
+    const repo = await this.getRepo(HorarioCG);
+    return repo.find();
   }
-  findOneHorario(id: string) {
-    return this.horarioRepo.findOneBy({ id });
+
+  async findOneHorario(id: string) {
+    const repo = await this.getRepo(HorarioCG);
+    return repo.findOneBy({ id });
   }
-  createHorario(data: Partial<HorarioCG>) {
-    return this.horarioRepo.save(data);
+
+  async createHorario(data: Partial<HorarioCG>) {
+    const repo = await this.getRepo(HorarioCG);
+    return repo.save(data);
   }
-  updateHorario(id: string, data: Partial<HorarioCG>) {
-    return this.horarioRepo.update({ id }, data);
+
+  async updateHorario(id: string, data: Partial<HorarioCG>) {
+    const repo = await this.getRepo(HorarioCG);
+    return repo.update({ id }, data);
   }
-  removeHorario(id: string) {
-    return this.horarioRepo.delete({ id });
+
+  async removeHorario(id: string) {
+    const repo = await this.getRepo(HorarioCG);
+    return repo.delete({ id });
   }
 
   // ─── Competencias ───
-  findAllCompetencias() {
-    return this.competenciaRepo.find();
+  async findAllCompetencias() {
+    const repo = await this.getRepo(Competencia);
+    return repo.find();
   }
-  findOneCompetencia(id: string) {
-    return this.competenciaRepo.findOneBy({ id });
+
+  async findOneCompetencia(id: string) {
+    const repo = await this.getRepo(Competencia);
+    return repo.findOneBy({ id });
   }
-  createCompetencia(data: Partial<Competencia>) {
-    return this.competenciaRepo.save(data);
+
+  async createCompetencia(data: Partial<Competencia>) {
+    const repo = await this.getRepo(Competencia);
+    return repo.save(data);
   }
-  updateCompetencia(id: string, data: Partial<Competencia>) {
-    return this.competenciaRepo.update({ id }, data);
+
+  async updateCompetencia(id: string, data: Partial<Competencia>) {
+    const repo = await this.getRepo(Competencia);
+    return repo.update({ id }, data);
   }
-  removeCompetencia(id: string) {
-    return this.competenciaRepo.delete({ id });
+
+  async removeCompetencia(id: string) {
+    const repo = await this.getRepo(Competencia);
+    return repo.delete({ id });
   }
 
   // ─── Eventos ───
-  findAllEventos() {
-    return this.eventoRepo.find();
+  async findAllEventos() {
+    const repo = await this.getRepo(Evento);
+    return repo.find();
   }
-  findOneEvento(id: string) {
-    return this.eventoRepo.findOneBy({ id });
+
+  async findOneEvento(id: string) {
+    const repo = await this.getRepo(Evento);
+    return repo.findOneBy({ id });
   }
-  createEvento(data: Partial<Evento>) {
-    return this.eventoRepo.save(data);
+
+  async createEvento(data: Partial<Evento>) {
+    const repo = await this.getRepo(Evento);
+    return repo.save(data);
   }
-  updateEvento(id: string, data: Partial<Evento>) {
-    return this.eventoRepo.update({ id }, data);
+
+  async updateEvento(id: string, data: Partial<Evento>) {
+    const repo = await this.getRepo(Evento);
+    return repo.update({ id }, data);
   }
-  removeEvento(id: string) {
-    return this.eventoRepo.delete({ id });
+
+  async removeEvento(id: string) {
+    const repo = await this.getRepo(Evento);
+    return repo.delete({ id });
   }
 
   // ─── Solicitudes ───
-  findAllSolicitudes() {
-    return this.solicitudRepo.find();
+  async findAllSolicitudes() {
+    const repo = await this.getRepo(SolicitudCambio);
+    return repo.find();
   }
-  findOneSolicitud(id: string) {
-    return this.solicitudRepo.findOneBy({ id });
-  }
-  createSolicitud(data: Partial<SolicitudCambio>) {
-    return this.solicitudRepo.save(data);
-  }
-  updateSolicitud(id: string, data: Partial<SolicitudCambio>) {
-    return this.solicitudRepo.update({ id }, data);
-  }
-  removeSolicitud(id: string) {
-    return this.solicitudRepo.delete({ id });
+
+  async findOneSolicitud(id: string) {
+    const repo = await this.getRepo(SolicitudCambio);
+    return repo.findOneBy({ id });
   }
 
   // ─── Notificaciones ───
-  findAllNotificaciones() {
-    return this.notificacionRepo.find();
+  async findAllNotificaciones() {
+    const repo = await this.getRepo(Notificacion);
+    return repo.find();
   }
-  findOneNotificacion(id: string) {
-    return this.notificacionRepo.findOneBy({ id });
+
+  async findOneNotificacion(id: string) {
+    const repo = await this.getRepo(Notificacion);
+    return repo.findOneBy({ id });
   }
-  createNotificacion(data: Partial<Notificacion>) {
-    return this.notificacionRepo.save(data);
-  }
-  updateNotificacion(id: string, data: Partial<Notificacion>) {
-    return this.notificacionRepo.update({ id }, data);
-  }
-  removeNotificacion(id: string) {
-    return this.notificacionRepo.delete({ id });
+
+  async removeNotificacion(id: string) {
+    const repo = await this.getRepo(Notificacion);
+    return repo.delete({ id });
   }
 
   // ─── Configuración ───
-  findAllConfiguracion() {
-    return this.configRepo.find();
+  async findAllConfiguracion() {
+    const repo = await this.getRepo(ConfiguracionApp);
+    return repo.find();
   }
-  findOneConfiguracion(id: string) {
-    return this.configRepo.findOneBy({ id });
+
+  async findOneConfiguracion(id: string) {
+    const repo = await this.getRepo(ConfiguracionApp);
+    return repo.findOneBy({ id });
   }
-  createConfiguracion(data: Partial<ConfiguracionApp>) {
-    return this.configRepo.save(data);
+
+  async createConfiguracion(data: Partial<ConfiguracionApp>) {
+    const repo = await this.getRepo(ConfiguracionApp);
+    return repo.save(data);
   }
-  updateConfiguracion(id: string, data: Partial<ConfiguracionApp>) {
-    return this.configRepo.update({ id }, data);
+
+  async updateConfiguracion(id: string, data: Partial<ConfiguracionApp>) {
+    const repo = await this.getRepo(ConfiguracionApp);
+    return repo.update({ id }, data);
   }
-  removeConfiguracion(id: string) {
-    return this.configRepo.delete({ id });
+
+  async removeConfiguracion(id: string) {
+    const repo = await this.getRepo(ConfiguracionApp);
+    return repo.delete({ id });
   }
 }

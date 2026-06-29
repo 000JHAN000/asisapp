@@ -1,49 +1,67 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Ubicacion } from '../entities/ubicacion.entity';
+import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class UbicacionesService {
   constructor(
-    @InjectRepository(Ubicacion)
-    private readonly repo: Repository<Ubicacion>,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
-  findAll() {
-    return this.repo.find();
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
   }
 
-  findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+  private async getRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, Ubicacion);
   }
 
-  create(data: Partial<Ubicacion>) {
-    const entity = this.repo.create(data);
-    return this.repo.save(entity);
+  async findAll() {
+    const repo = await this.getRepo();
+    return repo.find();
+  }
+
+  async findOne(id: string) {
+    const repo = await this.getRepo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async create(data: Partial<Ubicacion>) {
+    const repo = await this.getRepo();
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async update(id: string, data: Partial<Ubicacion>) {
-    await this.repo.update(id, data);
+    const repo = await this.getRepo();
+    await repo.update(id, data);
     return this.findOne(id);
   }
 
   async remove(id: string) {
+    const repo = await this.getRepo();
     const entity = await this.findOne(id);
     if (!entity) throw new NotFoundException('Ubicación no encontrada');
-    return this.repo.remove(entity);
+    return repo.remove(entity);
   }
 
   async findTipos() {
-    const result = await this.repo
+    const repo = await this.getRepo();
+    const result = await repo
       .createQueryBuilder('ubicacion')
       .select('DISTINCT ubicacion.tipo', 'tipo')
       .getRawMany();
     return result.map((r) => r.tipo);
   }
 
-  findByTipo(tipo: string) {
-    return this.repo.find({ where: { tipo } });
+  async findByTipo(tipo: string) {
+    const repo = await this.getRepo();
+    return repo.find({ where: { tipo } });
   }
 
   async findDisponiblesTransversal(
@@ -51,10 +69,10 @@ export class UbicacionesService {
     _dia?: string,
     _jornada?: string,
   ) {
-    // Mock: devolver todas las ubicaciones filtradas por tipo si se proporciona
+    const repo = await this.getRepo();
     if (tipo) {
-      return this.repo.find({ where: { tipo } });
+      return repo.find({ where: { tipo } });
     }
-    return this.repo.find();
+    return repo.find();
   }
 }
