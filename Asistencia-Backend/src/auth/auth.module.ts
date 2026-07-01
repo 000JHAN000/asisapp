@@ -15,6 +15,10 @@ import { RbacGuard }             from './infrastructure/guards/rbac.guard';
 import { RebacGuard }            from './infrastructure/guards/rebac.guard';
 import { AUTH_REPOSITORY }       from './domain/ports/auth.repository.port';
 import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.orm-entity';
+import { UsuarioOrmEntity } from 'src/usuario/infrastructure/entities/usuario.orm-entity';
+import { TenantModule } from 'src/auth/infrastructure/persistence/tenants/tenant.module';
+import { AuthCGController } from './infrastructure/http/auth-cg.controller';
+import { AuthCGService } from './application/auth-cg.service';
 
 @Module({
   imports: [
@@ -27,11 +31,13 @@ import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.or
         signOptions: { expiresIn: config.get<string>('JWT_EXPIRES')! as `${number}${'s'|'m'|'h'|'d'}` },
       }),
     }),
-    TypeOrmModule.forFeature([CredencialOrmEntity, AccesoOrmEntity, RolOrmEntity, PersonaOrmEntity]),
+    TypeOrmModule.forFeature([CredencialOrmEntity, AccesoOrmEntity, RolOrmEntity, PersonaOrmEntity, UsuarioOrmEntity]),
+    TenantModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthCGController],
   providers: [
     AuthService,
+    AuthCGService,
     JwtStrategy,
     JwtGuard,
     RbacGuard,
@@ -41,6 +47,6 @@ import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.or
       useClass: AuthTypeOrmRepository,
     },
   ],
-  exports: [JwtGuard, JwtStrategy, RbacGuard, RebacGuard],
+  exports: [JwtGuard, JwtStrategy, RbacGuard, RebacGuard, AuthCGService],
 })
 export class AuthModule {}

@@ -246,7 +246,7 @@ export class AdminRegistroMasivoComponent {
     formData.append('file', file);
 
     this.http.post<RegistroResultado>(
-      `http://localhost:3001/api/admin/registro-masivo?tipo=${this.tipo()}`,
+      `http://127.0.0.1:3001/api/admin/registro-masivo?tipo=${this.tipo()}`,
       formData,
     ).subscribe({
       next: (res) => {

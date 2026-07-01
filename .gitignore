@@ -1,10 +1,6 @@
 node_modules/
 dist/
 build/
-.env
-Asistencia-Backend/.env
-.env.*
-!.env.example
 *.log
 .DS_Store
 Thumbs.db
@@ -17,6 +13,7 @@ __pycache__/
 .Python
 venv/
 .venv/
+.venv-pdf/
 env/
 ENV/
 
@@ -31,3 +28,4 @@ ENV/
 
 # Misc
 *.local
+.aider*

@@ -1,1 +1,0 @@
-INSERT INTO asistencia_sesiones (id, "horarioId", fecha, "horaInicio", "horaFin", estado, "instructorId") VALUES ('123e4567-e89b-12d3-a456-426614174000', 'cba2dde4-84ac-469e-b105-74f44025b670', '2026-05-25', '07:00', '12:00', 'activa', 'd365923e-f8af-4716-8d8f-365da0fb4b4c');

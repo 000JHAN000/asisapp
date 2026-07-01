@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { TENANT_BUSINESS_ENTITIES } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { TENANT_BUSINESS_ENTITIES } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 
 async function run() {
   const tenantSlug = process.argv[2] || 'caldas';

@@ -226,14 +226,14 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
       next: (sesion: any) => {
         this.sesion.set(sesion);
         if (sesion) {
-          const miRegistro = sesion.registros?.find((r: any) => r.aprendizId === this.auth.currentUser()?.id);
+          const miRegistro = sesion.registros?.find((r: any) => r.aprendizId === this.auth.currentUser()?.perfilId);
           this.yaFirmo.set(!!miRegistro);
         }
       },
       error: () => {},
     });
 
-    this.http.get<{ hasFace: boolean }>('http://localhost:3001/api/aprendices/me/face-status')
+    this.http.get<{ hasFace: boolean }>('http://127.0.0.1:3001/api/aprendices/me/face-status')
       .subscribe({
         next: (res) => {
           this.needsFaceRegistration.set(!res.hasFace);
@@ -361,7 +361,7 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
   enviarFirma() {
     const canvas = this.canvasRef()?.nativeElement;
     const sesion = this.sesion();
-    const aprendizId = this.auth.currentUser()?.id;
+    const aprendizId = this.auth.currentUser()?.perfilId;
     const faceImage = this.faceVerificationImage();
     if (!canvas || !sesion || !aprendizId) return;
 

@@ -15,11 +15,11 @@ export class HorarioTypeOrmRepository implements HorarioRepositoryPort {
 
   crear(datos: Partial<Horario>): Promise<Horario> {
     const nuevo = this.repo.create(datos);
-    return this.repo.save(nuevo);
+    return this.repo.save(nuevo) as any;
   }
 
   listar(): Promise<Horario[]> {
-    return this.repo.find({ relations: ['curso', 'ambiente'] });
+    return this.repo.find({ relations: ['curso', 'ambiente'] }) as any;
   }
 
   async buscarPorId(id: string): Promise<Horario> {
@@ -28,7 +28,7 @@ export class HorarioTypeOrmRepository implements HorarioRepositoryPort {
       relations: ['curso', 'ambiente'],
     });
     if (!encontrado) throw new NotFoundException(`Horario ${id} no existe`);
-    return encontrado;
+    return encontrado as any;
   }
 
   async actualizar(id: string, datos: Partial<Horario>): Promise<void> {

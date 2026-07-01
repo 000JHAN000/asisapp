@@ -3,7 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { compare } from 'bcrypt';
-import { UsuarioCG } from '../../chronogest/entities/usuario-cg.entity';
+import { CredencialOrmEntity } from '../../credencial/infrastructure/entities/credencial.orm-entity';
+import { UsuarioOrmEntity } from '../../usuario/infrastructure/entities/usuario.orm-entity';
+import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
 
 export interface SuperAdminJwtPayload {
   sub: string;
@@ -16,37 +18,61 @@ export interface SuperAdminJwtPayload {
 @Injectable()
 export class SuperAdminAuthService {
   constructor(
-    @InjectRepository(UsuarioCG)
-    private readonly usuarioRepo: Repository<UsuarioCG>,
+    @InjectRepository(CredencialOrmEntity)
+    private readonly credencialRepo: Repository<CredencialOrmEntity>,
+    @InjectRepository(UsuarioOrmEntity)
+    private readonly usuarioRepo: Repository<UsuarioOrmEntity>,
+    @InjectRepository(PersonaOrmEntity)
+    private readonly personaRepo: Repository<PersonaOrmEntity>,
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(identifier: string, password: string) {
-    const usuario = await this.usuarioRepo.findOne({
-      where: [{ correo: identifier }, { documento: identifier }],
+  private async findCredencialByIdentifier(identifier: string) {
+    const byLogin = await this.credencialRepo.findOne({
+      where: { login: identifier },
+      relations: ['usuario', 'usuario.persona', 'rol'],
     });
+    if (byLogin) return byLogin;
 
-    if (!usuario) {
+    const persona = await this.personaRepo.findOne({ where: { documento: identifier } });
+    if (!persona) return null;
+
+    const usuario = await this.usuarioRepo.findOne({ where: { persona_fk: persona.id_persona } });
+    if (!usuario) return null;
+
+    return this.credencialRepo.findOne({
+      where: { usuario_fk: usuario.id_usuario },
+      relations: ['usuario', 'usuario.persona', 'rol'],
+    });
+  }
+
+  async login(identifier: string, password: string) {
+    const credencial = await this.findCredencialByIdentifier(identifier);
+    if (!credencial || !credencial.usuario || !credencial.usuario.persona) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
+
+    const usuario = credencial.usuario;
+    const persona = usuario.persona;
+    const rolNombre = credencial.rol?.nombre ?? '';
 
     if (!usuario.activo) {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    if (usuario.rol !== 'super_admin') {
+    if (rolNombre !== 'super_admin') {
       throw new UnauthorizedException('Acceso exclusivo para super administradores');
     }
 
-    const valid = await compare(password, usuario.password);
+    const valid = await compare(password, credencial.password);
     if (!valid) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
     const payload: SuperAdminJwtPayload = {
-      sub: usuario.id,
-      correo: usuario.correo,
-      documento: usuario.documento,
+      sub: usuario.id_usuario,
+      correo: persona.correo,
+      documento: persona.documento,
       rol: 'super_admin',
       scope: 'platform',
     };
@@ -59,10 +85,10 @@ export class SuperAdminAuthService {
     return {
       access_token,
       user: {
-        id: usuario.id,
-        correo: usuario.correo,
-        documento: usuario.documento,
-        rol: usuario.rol,
+        id: usuario.id_usuario,
+        correo: persona.correo,
+        documento: persona.documento,
+        rol: rolNombre,
       },
     };
   }

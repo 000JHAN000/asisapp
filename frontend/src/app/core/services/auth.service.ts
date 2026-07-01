@@ -6,7 +6,7 @@ import { User, LoginResponse, Tenant } from '../models/user.model';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly API = 'http://localhost:3001/api/auth';
+  private readonly API = 'http://127.0.0.1:3001/api/auth';
   private readonly TOKEN_KEY = 'cg_token';
   private readonly USER_KEY = 'cg_user';
   private readonly TENANT_KEY = 'cg_tenant';
@@ -78,6 +78,10 @@ export class AuthService {
 
   register(data: any) {
     return this.http.post(`${this.API}/register`, data);
+  }
+
+  registerAdmin(data: any) {
+    return this.http.post(`${this.API}/register-admin`, data);
   }
 
   forgotPassword(correo: string) {

@@ -37,6 +37,8 @@ def decode_base64_image(base64_str: str) -> bytes:
     """Decodifica una imagen base64, soportando data URLs."""
     if "," in base64_str:
         base64_str = base64_str.split(",")[1]
+    # Limpiar BOM, espacios y saltos de linea que algunos clientes incluyen
+    base64_str = base64_str.strip().replace("\ufeff", "").replace("\n", "").replace("\r", "").replace(" ", "")
     return base64.b64decode(base64_str)
 
 

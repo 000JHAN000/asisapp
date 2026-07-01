@@ -3,7 +3,9 @@
 --  Se ejecuta dentro de la BD maestra (sena_db).
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS tenants (
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE IF NOT EXISTS auth.tenants (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug          VARCHAR(64)  NOT NULL UNIQUE,
   nombre        VARCHAR(255) NOT NULL,

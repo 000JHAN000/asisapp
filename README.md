@@ -412,21 +412,20 @@ Chronogest-2.1-V/
     ├── mysql/              Scripts legacy de MySQL
     └── postgres/init/      Scripts de inicialización PostgreSQL
         ├── 01-create-tenant-dbs.sql      # Crea BDs por sede
-        ├── 02-create-tenants-table.sql   # Catálogo maestro de sedes
-        └── 03-migrate-users-tenant.sql   # Usuarios existentes -> Yamborot
+        └── 02-create-tenants-table.sql   # Crea el esquema auth y el catálogo maestro de sedes
 ```
 
 **Base de datos:**
-- `sena_db` — BD maestra. Contiene el catálogo de tenants/sedes en la tabla `tenants` y los usuarios en `cg_usuarios`.
+- `sena_db` — BD maestra. Contiene el catálogo de tenants/sedes en la tabla `tenants` y los usuarios maestros en `usuario_maestro`.
 - `sena_db_yamborot` — BD de la sede Yamborot (Database-per-Tenant).
 - `sena_db_centro_comercio` — BD de la sede Centro Comercio y Servicio (Database-per-Tenant).
 
-> **Nota:** actualmente el catálogo de sedes y las BDs físicas están creadas, pero los repositorios de negocio siguen usando `sena_db`. El aislamiento completo por sede se activará en una fase posterior.
+> **Nota:** los repositorios de negocio operan sobre la base de datos de cada sede (tenant). Solo el catálogo de sedes (`auth.tenants`) y los usuarios maestros (`auth.usuario_maestro`) permanecen en `sena_db`.
 >
 > **Aplicar en un entorno existente:** los scripts de `docker/postgres/init` solo se ejecutan automáticamente la primera vez que se crea el volumen de PostgreSQL. Si ya tienes datos, ejecuta manualmente los scripts o haz `docker-compose down -v` para recrear todo (⚠️ borra los datos actuales).
 
 **Sede asignada por usuario:**
-- Cada usuario tiene una sede asignada en el campo `tenant_slug` de `cg_usuarios`.
+- Cada usuario tiene una sede asignada en el campo `tenant_slug` de `usuario_maestro`.
 - **Usuarios existentes**: migrados a `yamborot` por defecto.
 - **Nuevos usuarios**: se registran sin sede. El administrador debe asignarles una sede desde la pantalla **Usuarios** para que puedan iniciar sesión.
 - El login detecta automáticamente la sede del usuario; no hay selector en el login.

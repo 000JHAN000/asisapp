@@ -18,6 +18,12 @@ export class UsuarioOrmEntity {
   @Column('uuid')
   aplicativo_fk: string;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  tenant_slug: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  activo: boolean;
+
   @ManyToOne(() => PersonaOrmEntity, (persona) => persona.usuarios)
   @JoinColumn({ name: 'persona_fk' })
   persona: PersonaOrmEntity;

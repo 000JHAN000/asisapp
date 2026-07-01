@@ -11,33 +11,51 @@ export class PersonaOrmEntity {
     @PrimaryGeneratedColumn('uuid')
     id_persona: string;
 
-    @Column({ type: 'int', unique: true })
-    documento: number;
+    @Column({ type: 'varchar', length: 20, unique: true })
+    documento: string;
 
     @Column({ type: 'varchar', length: 50 })
     nombres: string;
 
-    @Column({ type: 'varchar', length: 50 })
-    direccion: string;
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    apellidos: string | null;
 
-    @Column({ type: 'varchar', length: 15 })
-    telefono: string;
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    direccion: string | null;
 
-    @Column({ type: 'varchar', length: 50, unique: true })
+    @Column({ type: 'varchar', length: 15, nullable: true })
+    telefono: string | null;
+
+    @Column({ type: 'varchar', length: 100, unique: true })
     correo: string;
 
-    @Column({ type: 'enum', enum: GeneroPersona })
-    genero: GeneroPersona;
+    @Column({ type: 'enum', enum: GeneroPersona, nullable: true })
+    genero: GeneroPersona | null;
 
     @Column({ type: 'enum', enum: EstadoPersona, default: EstadoPersona.activo })
     estado: EstadoPersona;
 
-    @Column('uuid')
-    municipio_fk: string;
+    @Column({ name: 'tipo_doc', type: 'varchar', length: 10, nullable: true })
+    tipo_doc: string | null;
 
-    @ManyToOne(() => MunicipioOrmEntity, (municipio) => municipio.personas)
+    @Column({ name: 'municipio_nombre', type: 'varchar', length: 100, nullable: true })
+    municipio_nombre: string | null;
+
+    @Column('uuid', { nullable: true })
+    municipio_fk: string | null;
+
+    @Column({ name: 'face_photo_path', type: 'varchar', length: 500, nullable: true })
+    facePhotoPath: string | null;
+
+    @Column({ name: 'face_embedding', type: 'text', nullable: true })
+    faceEmbedding: string | null;
+
+    @Column({ name: 'last_attendance_photo_path', type: 'varchar', length: 500, nullable: true })
+    lastAttendancePhotoPath: string | null;
+
+    @ManyToOne(() => MunicipioOrmEntity, (municipio) => municipio.personas, { nullable: true })
     @JoinColumn({ name: 'municipio_fk' })
-    municipio: MunicipioOrmEntity;
+    municipio: MunicipioOrmEntity | null;
 
     @OneToMany(() => MatriculaOrmEntity, (matricula) => matricula.persona)
     matriculas: MatriculaOrmEntity[];

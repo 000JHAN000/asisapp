@@ -31,6 +31,9 @@ export class CursoOrmEntity {
   @Column({ type: 'varchar', length: 100 })
   lider: string;
 
+  @Column({ type: 'int', nullable: true })
+  intensidad_horaria: number | null;
+
   @ManyToOne(() => AreaOrmEntity, (area) => area.cursos)
   @JoinColumn({ name: 'area_fk' })
   area: AreaOrmEntity;

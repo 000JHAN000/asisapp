@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Tenant } from '../models/user.model';
 
-const BASE = 'http://localhost:3001/api';
+const BASE = 'http://127.0.0.1:3001/api';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -12,6 +12,12 @@ export class ApiService {
   getTenants() { return this.http.get<Tenant[]>(`${BASE}/tenants`); }
   updateTenant(documento: string, tenantSlug: string | null) {
     return this.http.patch(`${BASE}/usuarios/tenant`, { documento, tenantSlug });
+  }
+  updateUsuarioActivo(documento: string, activo: boolean) {
+    return this.http.patch(`${BASE}/usuarios/activo`, { documento, activo });
+  }
+  updateUsuarioMunicipio(documento: string, municipio: string | null) {
+    return this.http.patch(`${BASE}/usuarios/municipio`, { documento, municipio });
   }
 
   // ── Fichas (horarios_db) ──────────────────────────────────────

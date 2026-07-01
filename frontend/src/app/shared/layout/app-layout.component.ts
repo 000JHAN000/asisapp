@@ -116,7 +116,7 @@ import { ToastComponent } from '../components/toast.component';
             <div class="user-menu" (click)="menuOpen.update(v => !v)">
               <div class="avatar">
                 @if (user()?.fotoPerfil) {
-                  <img [src]="'http://localhost:3001' + user()!.fotoPerfil" alt="avatar">
+                  <img [src]="'http://127.0.0.1:3001' + user()!.fotoPerfil" alt="avatar">
                 } @else {
                   {{ initials() }}
                 }
@@ -683,10 +683,10 @@ export class AppLayoutComponent implements OnDestroy {
         const url = res.url;
         const u = this.user()!;
         const endpoint = u.rol === 'admin'
-          ? `http://localhost:3001/api/administradores/${u.id}`
+          ? `http://127.0.0.1:3001/api/administradores/${u.id}`
           : u.rol === 'instructor'
-          ? `http://localhost:3001/api/instructores/${u.id}`
-          : `http://localhost:3001/api/aprendices/${u.id}`;
+          ? `http://127.0.0.1:3001/api/instructores/${u.id}`
+          : `http://127.0.0.1:3001/api/aprendices/${u.id}`;
         this.http.put(endpoint, { fotoPerfil: url }).subscribe();
         this.auth.updateCurrentUser({ fotoPerfil: url });
       },

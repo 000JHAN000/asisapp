@@ -106,6 +106,8 @@ def _b64_to_bytes(b64: str) -> bytes:
     import base64
     if "," in b64:
         b64 = b64.split(",")[1]
+    # Limpiar BOM, espacios y saltos de linea que algunos clientes incluyen
+    b64 = b64.strip().replace("\ufeff", "").replace("\n", "").replace("\r", "").replace(" ", "")
     return base64.b64decode(b64)
 
 

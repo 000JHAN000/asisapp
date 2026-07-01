@@ -9,7 +9,7 @@ interface SuperAdminLoginResponse {
 
 @Injectable({ providedIn: 'root' })
 export class SuperAdminAuthService {
-  private readonly API = 'http://localhost:3001/api/super-admin/auth';
+  private readonly API = 'http://127.0.0.1:3001/api/super-admin/auth';
   private readonly TOKEN_KEY = 'cg_sa_token';
 
   private readonly _token = signal<string | null>(localStorage.getItem(this.TOKEN_KEY));

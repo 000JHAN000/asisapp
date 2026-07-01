@@ -3,16 +3,24 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CursoOrmEntity }          from './infrastructure/entities/curso.orm-entity';
+import { Ficha }                   from './infrastructure/entities/ficha.orm-entity';
 import { CursoTypeOrmRepository }  from './infrastructure/adapters/curso.typeorm.repository';
 import { CursoService }            from './application/curso.service';
+import { FichasCGService }         from './application/fichas-cg.service';
 import { CursoController }         from './infrastructure/http/curso.controller';
+import { FichasCGController }      from './infrastructure/http/fichas-cg.controller';
 import { CURSO_REPOSITORY }        from './domain/ports/curso.repository.port';
+import { TenantModule }            from 'src/auth/infrastructure/persistence/tenants/tenant.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CursoOrmEntity])],
-  controllers: [CursoController],
+  imports: [
+    TypeOrmModule.forFeature([CursoOrmEntity, Ficha]),
+    TenantModule,
+  ],
+  controllers: [CursoController, FichasCGController],
   providers: [
     CursoService,
+    FichasCGService,
     {
       provide: CURSO_REPOSITORY,
       useClass: CursoTypeOrmRepository,

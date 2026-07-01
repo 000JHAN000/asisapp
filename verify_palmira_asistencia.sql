@@ -1,1 +1,0 @@
-SELECT id, estado, "horaRegistro", "sesionId", "aprendizId" FROM asistencia_registros; SELECT id_asistencia, estado, hora, "aprendizId" FROM asistencia_orm_entity; SELECT id, "diaSemana", estado FROM asistencia_sesiones;

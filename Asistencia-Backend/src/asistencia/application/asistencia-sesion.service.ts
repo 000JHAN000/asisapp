@@ -3,11 +3,12 @@ import { In } from 'typeorm';
 import { AsistenciaSesionTenantEntity } from '../infrastructure/entities/tenant/asistencia-sesion.tenant-entity';
 import { AsistenciaRegistroTenantEntity } from '../infrastructure/entities/tenant/asistencia-registro.tenant-entity';
 import { FormacionAsistenciaTenantEntity } from '../infrastructure/entities/tenant/formacion-asistencia.tenant-entity';
-import { HorarioCG } from '../../chronogest/entities/horario-cg.entity';
-import { AprendizCG } from '../../chronogest/entities/aprendiz-cg.entity';
+import { HorarioOrmEntity } from '../../horario/infrastructure/entities/horario.orm-entity';
+import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
+import { MatriculaOrmEntity } from '../../matricula/infrastructure/entities/matricula.orm-entity';
 import { CreateAsistenciaSesionDto } from '../infrastructure/http/dto/create-asistencia-sesion.dto';
-import { readFileToBase64Async } from '../../chronogest/utils/file-storage.util';
-import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { readFileToBase64Async } from '../../infrastructure/utils/file-storage.util';
+import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
@@ -37,23 +38,23 @@ export class AsistenciaSesionService {
   }
 
   private async getHorarioRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, HorarioCG);
+    return this.connectionManager.getTenantRepository(this.tenantId, HorarioOrmEntity);
   }
 
-  private async getAprendizRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, AprendizCG);
+  private async getPersonaRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, PersonaOrmEntity);
   }
 
   async create(dto: CreateAsistenciaSesionDto, instructorId: string) {
     const horarioRepo = await this.getHorarioRepo();
-    const horario = await horarioRepo.findOne({ where: { id: dto.horarioId } });
+    const horario = await horarioRepo.findOne({ where: { id_horario: dto.horarioId } });
     if (!horario) throw new BadRequestException('Horario no encontrado');
 
     const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
     const hoy = new Date();
     const diaActual = dias[hoy.getDay()];
 
-    if (horario.instructorId !== instructorId) {
+    if (horario.instructor_fk !== instructorId) {
       throw new BadRequestException('Este horario no pertenece a usted');
     }
 
@@ -61,7 +62,7 @@ export class AsistenciaSesionService {
       throw new BadRequestException(`Solo puedes iniciar asistencia para clases del día de hoy (${diaActual})`);
     }
 
-    const fechaHoy = hoy.toLocaleDateString('en-CA');
+    const fechaHoy = hoy.toISOString().split('T')[0];
     if (dto.fecha !== fechaHoy) {
       throw new BadRequestException('La fecha de la sesión debe ser hoy');
     }
@@ -69,13 +70,13 @@ export class AsistenciaSesionService {
     const formacionRepo = await this.getFormacionRepo();
     let formacion = await formacionRepo.findOne({
       where: {
-        cgHorarioId: dto.horarioId,
+        horario_fk: dto.horarioId,
         fecha: new Date(dto.fecha),
       },
     });
     if (!formacion) {
       formacion = formacionRepo.create({
-        cgHorarioId: dto.horarioId,
+        horario_fk: dto.horarioId,
         fecha: new Date(dto.fecha),
         hora_inicio: dto.horaInicio,
         hora_fin: dto.horaFin,
@@ -102,11 +103,12 @@ export class AsistenciaSesionService {
     if (registros.length === 0) return [];
 
     const aprendizIds = [...new Set(registros.map((r) => r.aprendizId))];
-    const aprendizRepo = await this.getAprendizRepo();
-    const aprendices = await aprendizRepo.find({
-      where: { id: In(aprendizIds) },
+    const personaRepo = await this.getPersonaRepo();
+    const aprendices = await personaRepo.find({
+      where: { id_persona: In(aprendizIds) },
+      relations: ['matriculas'],
     });
-    const aprendizMap = new Map(aprendices.map((a) => [a.id, a]));
+    const aprendizMap = new Map(aprendices.map((a) => [a.id_persona, a]));
 
     const enriched = await Promise.all(
       registros.map(async (r) => {
@@ -117,12 +119,12 @@ export class AsistenciaSesionService {
             r.facePhotoPath ? readFileToBase64Async(r.facePhotoPath) : Promise.resolve(null),
           ]);
           (r as any).aprendiz = {
-            id: aprendiz.id,
-            nombre: aprendiz.nombre,
-            apellido: aprendiz.apellido,
+            id: aprendiz.id_persona,
+            nombre: aprendiz.nombres,
+            apellido: aprendiz.apellidos,
             correo: aprendiz.correo,
             numDoc: aprendiz.documento,
-            fichaId: aprendiz.fichaId,
+            fichaId: aprendiz.matriculas?.[0]?.curso_fk ?? null,
             facePhoto: facePhotoB64,
           };
           (r as any).lastAttendancePhoto = lastAttendancePhotoB64;
@@ -176,7 +178,7 @@ export class AsistenciaSesionService {
     const sesion = await sesionRepo
       .createQueryBuilder('sesion')
       .where('sesion.estado = :estado', { estado: 'activa' })
-      .andWhere('sesion.horarioId IN (SELECT h.id::varchar FROM cg_horarios h WHERE h."fichaId" = :fichaId::varchar)', { fichaId })
+      .andWhere('sesion.horarioId IN (SELECT h.id_horario::varchar FROM horario_orm_entity h WHERE h.curso_fk = :fichaId::uuid)', { fichaId })
       .getOne();
 
     if (!sesion) return null;
@@ -200,15 +202,17 @@ export class AsistenciaSesionService {
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
 
     const horarioRepo = await this.getHorarioRepo();
-    const horario = await horarioRepo.findOne({ where: { id: sesion.horarioId } });
+    const horario = await horarioRepo.findOne({ where: { id_horario: sesion.horarioId } });
     if (!horario) return [];
 
     const registroRepo = await this.getRegistroRepo();
     const registros = await registroRepo.find({ where: { sesionId } });
     const aprendizIdsConRegistro = registros.map((r) => r.aprendizId);
 
-    const aprendizRepo = await this.getAprendizRepo();
-    const aprendices = await aprendizRepo.find({ where: { fichaId: horario.fichaId } });
-    return aprendices.filter((a) => !aprendizIdsConRegistro.includes(a.id));
+    const matriculaRepo = await this.connectionManager.getTenantRepository(this.tenantId, MatriculaOrmEntity);
+    const matriculas = await matriculaRepo.find({ where: { curso_fk: horario.curso_fk }, relations: ['persona'] });
+    return matriculas
+      .map((m) => m.persona)
+      .filter((p): p is PersonaOrmEntity => !!p && !aprendizIdsConRegistro.includes(p.id_persona));
   }
 }

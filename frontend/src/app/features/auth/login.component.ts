@@ -1,4 +1,4 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -151,7 +151,7 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
         <!-- ===== REGISTER ===== -->
         @if (view() === 'register') {
         <div class="form-box form-scroll">
-          <button class="back-link" (click)="goToLogin()">← Volver al login</button>
+          <button class="back-link" (click)="goToLogin()">← {{ isRegisterOnly ? 'Volver al panel' : 'Volver al login' }}</button>
           <h2>Registro de Usuario</h2>
 
           <!-- Tipo de usuario -->
@@ -165,10 +165,17 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
           </div>
 
           <!-- Sede -->
+          @if (isRegisterOnly) {
+          <div class="form-group mt-4">
+            <label class="form-label">Sede</label>
+            <input class="form-control" [value]="currentTenantLabel" disabled />
+          </div>
+          } @else {
           <div class="form-group mt-4">
             <label class="form-label">Sede *</label>
             <app-ss [options]="tenantOpts()" placeholder="Seleccionar sede..." [(ngModel)]="regForm.tenantSlug"></app-ss>
           </div>
+          }
 
           <div class="grid-2 mt-4">
             <div class="form-group">
@@ -211,14 +218,23 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
             </div>
           </div>
 
-          @if (regRol === 'aprendiz' && fichas().length) {
+          @if (regRol === 'aprendiz') {
           <div class="form-group mt-4">
             <label class="form-label">Asignación de Ficha o Curso *</label>
-            <!-- Filtro por área -->
-            <div style="margin-bottom:8px">
-              <app-ss [options]="areaFiltroOpts()" placeholder="Todas las áreas" [(ngModel)]="areaFiltroReg"></app-ss>
-            </div>
-            <app-ss [options]="fichasOpts()" placeholder="Buscar y seleccionar ficha..." [(ngModel)]="regForm.fichaId"></app-ss>
+            @if (fichas().length) {
+              <!-- Filtro por área -->
+              <div style="margin-bottom:8px">
+                <app-ss [options]="areaFiltroOpts()" placeholder="Todas las áreas" [(ngModel)]="areaFiltroReg"></app-ss>
+              </div>
+              <app-ss [options]="fichasOpts()" placeholder="Buscar y seleccionar ficha..." [(ngModel)]="regForm.fichaId"></app-ss>
+            } @else {
+              <div class="warning-msg">
+                No hay fichas disponibles en esta sede. Debes crear una ficha primero para poder registrar aprendices.
+              </div>
+              @if (isRegisterOnly) {
+                <button type="button" class="btn-outline mt-2" (click)="goToCreateFicha()">Ir a crear ficha</button>
+              }
+            }
           </div>
           }
 
@@ -226,7 +242,7 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
           @if (regSuccess()) { <div class="success-msg mt-4">{{ regSuccess() }}</div> }
 
           <div class="btn-row mt-4">
-            <button class="btn-outline" (click)="goToLogin()">Cancelar</button>
+            <button class="btn-outline" (click)="goToLogin()">{{ isRegisterOnly ? 'Volver a usuarios' : 'Cancelar' }}</button>
             <button class="btn-submit" (click)="doRegister()" [disabled]="loading()">
               Registrar Usuario
             </button>
@@ -343,6 +359,11 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
       background: #fee2e2; color: #991b1b; border-radius: 8px;
       padding: 10px 14px; font-size: 13px; margin-top: 12px;
     }
+    .warning-msg {
+      background: #fff7ed; color: #9a3412; border: 1px solid #fdba74;
+      border-radius: 8px; padding: 10px 14px; font-size: 13px;
+    }
+    .mt-2 { margin-top: 8px; }
     .success-msg {
       background: #dcfce7; color: #166534; border-radius: 8px;
       padding: 10px 14px; font-size: 13px;
@@ -385,7 +406,7 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
     }
   `],
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   view = signal<AuthView>('login');
 
   // Login
@@ -472,6 +493,9 @@ export class LoginComponent {
     { key: 'admin', icon: 'shield', label: 'Administrador' },
   ];
 
+  // Modo registro unitario desde el panel admin (/register)
+  isRegisterOnly = false;
+
   modules = [
     { icon: 'calendar', title: 'Horarios' },
     { icon: 'building-2', title: 'Ambientes' },
@@ -479,7 +503,29 @@ export class LoginComponent {
     { icon: 'layout-dashboard', title: 'Fichas' },
   ];
 
-  constructor(private auth: AuthService, private router: Router, private api: ApiService) {}
+  constructor(
+    private auth: AuthService,
+    private router: Router,
+    private api: ApiService,
+  ) {}
+
+  ngOnInit() {
+    // Si entramos por /register, abrimos directamente la vista de registro
+    // y limitamos los roles a Aprendiz e Instructor.
+    if (this.router.url === '/register' || this.router.url.startsWith('/register')) {
+      this.isRegisterOnly = true;
+      this.roles = this.roles.filter(r => r.key !== 'admin');
+      this.regForm.tenantSlug = this.auth.tenantSlug ?? '';
+      this.loadFichas();
+      this.loadMunicipios();
+      this.loadTenants();
+      this.view.set('register');
+    }
+  }
+
+  get currentTenantLabel(): string {
+    return this.auth.currentTenant()?.nombre ?? 'Sede no disponible';
+  }
 
   goToPin() {
     this.pin = '';
@@ -488,9 +534,18 @@ export class LoginComponent {
   }
 
   goToLogin() {
+    if (this.isRegisterOnly) {
+      // Volver al panel de usuarios cuando venimos del registro unitario
+      this.router.navigate(['/app/admin/usuarios']);
+      return;
+    }
     this.resetRegForm();
     this.view.set('login');
     this.regSuccess.set('');
+  }
+
+  goToCreateFicha() {
+    this.router.navigate(['/app/admin/programador-fichas']);
   }
 
   resetRegForm() {
@@ -578,17 +633,28 @@ export class LoginComponent {
   doRegister() {
     this.regError.set('');
     const data = { ...this.regForm, rol: this.regRol };
+    if (this.isRegisterOnly) {
+      data.tenantSlug = this.auth.tenantSlug ?? data.tenantSlug;
+    }
     if (!data.nombre || !data.apellido || !data.numDoc || !data.correo || !data.password) {
       this.regError.set('Completa todos los campos obligatorios'); return;
     }
     if (!data.tenantSlug) {
       this.regError.set('Por favor, selecciona una sede.'); return;
     }
-    if (this.regRol === 'aprendiz' && !data.fichaId) {
-      this.regError.set('Por favor, selecciona a qué Ficha o Curso perteneces para poder registrarte.'); return;
+    if (this.regRol === 'aprendiz') {
+      if (!this.fichas().length) {
+        this.regError.set('No hay fichas disponibles en esta sede. Crea una ficha primero.'); return;
+      }
+      if (!data.fichaId) {
+        this.regError.set('Por favor, selecciona a qué Ficha o Curso pertenece el aprendiz.'); return;
+      }
     }
     this.loading.set(true);
-    this.auth.register(data).subscribe({
+    const request$ = this.isRegisterOnly
+      ? this.auth.registerAdmin(data)
+      : this.auth.register(data);
+    request$.subscribe({
       next: () => {
         this.loading.set(false);
         this.regSuccess.set('Usuario registrado exitosamente. Los campos han sido borrados por si necesitas ingresar otro.');

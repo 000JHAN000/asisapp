@@ -1,1 +1,0 @@
-INSERT INTO cg_fichas (id, codigo, programa, area, "fechaInicio", "fechaFin", "intensidadHoraria") VALUES ('9a8b516c-9c0a-4820-a55b-74ab906782f3', 'PALM123', 'Tecnologo en Pruebas Palmira', 'TIC', '2025-01-20', '2026-12-15', 12);

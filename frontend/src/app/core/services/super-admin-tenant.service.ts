@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
-const BASE = 'http://localhost:3001/api';
+const BASE = 'http://127.0.0.1:3001/api';
 
 export interface SuperAdminTenant {
   id: string;

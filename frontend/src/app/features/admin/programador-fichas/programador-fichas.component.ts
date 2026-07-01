@@ -146,12 +146,18 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
     <h2>Programador de Fichas</h2>
     <p class="text-muted text-sm">Gestiona el calendario de competencias por ficha de formación</p>
   </div>
-  @if (selectedFicha() && activeTab() === 'calendar') {
+  <div style="display:flex; gap:10px;">
+    <button class="btn btn-blue" (click)="openNewFicha()">
+      <lucide-icon name="plus" [size]="16"></lucide-icon>
+      Nueva Ficha
+    </button>
+    @if (selectedFicha() && activeTab() === 'calendar') {
     <button class="btn btn-blue" (click)="openNewComp()">
       <lucide-icon name="plus" [size]="16"></lucide-icon>
       Nueva Competencia
     </button>
-  }
+    }
+  </div>
 </div>
 
 <!-- ── Filtros cascading ── -->
@@ -809,6 +815,63 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
     </div>
   </div>
 }
+
+<!-- ════════════════ MODAL: Nueva Ficha ════════════════ -->
+@if (fichaModalOpen()) {
+  <div class="modal-overlay" (click)="closeFichaModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Nueva Ficha de Formación</h3>
+        <button class="btn-icon" (click)="closeFichaModal()">
+          <lucide-icon name="x" [size]="18"></lucide-icon>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="form-group">
+          <label class="form-label">Código de la ficha *</label>
+          <input class="form-control" [(ngModel)]="nfCodigo" placeholder="Ej: 3063316" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Programa *</label>
+          <input class="form-control" [(ngModel)]="nfPrograma" placeholder="Ej: Tecnólogo en ADSO" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Área de formación *</label>
+          <input class="form-control" [(ngModel)]="nfArea" placeholder="Ej: TIC" />
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Fecha de inicio</label>
+            <input type="date" class="form-control" [(ngModel)]="nfFechaInicio" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha de fin</label>
+            <input type="date" class="form-control" [(ngModel)]="nfFechaFin" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Intensidad horaria total (horas)</label>
+          <input type="number" class="form-control" [(ngModel)]="nfIntensidad" placeholder="Ej: 960" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mt-6">
+        <button class="btn btn-outline" (click)="closeFichaModal()">Cancelar</button>
+        <button class="btn btn-blue" (click)="saveFicha()" [disabled]="nfSaving()">
+          @if (nfSaving()) {
+            <lucide-icon name="loader" [size]="14" style="animation:pf-spin 1s linear infinite"></lucide-icon>
+          }
+          Crear ficha
+        </button>
+      </div>
+    </div>
+  </div>
+}
   `,
   styles: [`
     @keyframes pf-spin { to { transform: rotate(360deg); } }
@@ -1124,6 +1187,16 @@ export class ProgramadorFichasComponent implements OnInit {
 
   // ── Modal: intensidad horaria ─────────────────────────────────
   mHorasRequeridas = signal<number | null>(null);
+
+  // ── Modal nueva ficha ───────────────────────────────────────────
+  fichaModalOpen = signal(false);
+  nfCodigo       = signal('');
+  nfPrograma     = signal('');
+  nfArea         = signal('');
+  nfFechaInicio  = signal('');
+  nfFechaFin     = signal('');
+  nfIntensidad   = signal<number | null>(null);
+  nfSaving       = signal(false);
 
   // ── Computed: opciones filtros ────────────────────────────────
   areas = computed((): SSOption[] => {
@@ -1553,5 +1626,63 @@ export class ProgramadorFichasComponent implements OnInit {
       .filter(d => d > desde)
       .sort();
     return dias.length ? fmtDate(dias[0]) : 'ninguna';
+  }
+
+  // ── Modal nueva ficha ───────────────────────────────────────────
+  openNewFicha() {
+    this.nfCodigo.set('');
+    this.nfPrograma.set('');
+    this.nfArea.set('');
+    this.nfFechaInicio.set('');
+    this.nfFechaFin.set('');
+    this.nfIntensidad.set(null);
+    this.nfSaving.set(false);
+    this.fichaModalOpen.set(true);
+    this.cdr.markForCheck(); this.cdr.detectChanges();
+  }
+
+  closeFichaModal() {
+    this.fichaModalOpen.set(false);
+  }
+
+  saveFicha() {
+    const codigo = this.nfCodigo().trim();
+    const programa = this.nfPrograma().trim();
+    const area = this.nfArea().trim();
+    if (!codigo || !programa || !area) {
+      this.toast.error('Completa código, programa y área'); return;
+    }
+    const dto: any = {
+      codigo,
+      programa,
+      area,
+      fechaInicio: this.nfFechaInicio() || null,
+      fechaFin: this.nfFechaFin() || null,
+      intensidadHoraria: this.nfIntensidad() ?? null,
+    };
+    this.nfSaving.set(true);
+    this.api.createFicha(dto).subscribe({
+      next: () => {
+        this.toast.success('Ficha creada', `${codigo} fue registrada correctamente.`);
+        this.closeFichaModal();
+        this.nfSaving.set(false);
+        this.reloadFichas();
+      },
+      error: (e) => {
+        this.nfSaving.set(false);
+        this.toast.error('Error al crear ficha', e?.error?.message ?? 'No se pudo guardar la ficha.');
+        this.cdr.markForCheck(); this.cdr.detectChanges();
+      },
+    });
+  }
+
+  reloadFichas() {
+    this.api.getFichas().subscribe({
+      next: d => {
+        this.fichas.set(d);
+        this.cdr.markForCheck(); this.cdr.detectChanges();
+      },
+      error: () => this.toast.error('Error recargando fichas'),
+    });
   }
 }

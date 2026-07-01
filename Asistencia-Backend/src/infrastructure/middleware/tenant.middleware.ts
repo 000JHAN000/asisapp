@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, BadRequestException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { tenantStorage } from '../config/tenant-context';
-import { TenantConnectionManager } from '../persistence/tenants/tenant-connection.manager';
+import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {

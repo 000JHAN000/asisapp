@@ -64,7 +64,10 @@ def register_face(image_base64: str, user_id: str) -> dict:
     path = None
     try:
         import base64
-        img_bytes = base64.b64decode(image_base64.split(",")[1] if "," in image_base64 else image_base64)
+        b64 = image_base64.split(",")[1] if "," in image_base64 else image_base64
+        # Limpiar BOM, espacios y saltos de linea que algunos clientes incluyen
+        b64 = b64.strip().replace("\ufeff", "").replace("\n", "").replace("\r", "").replace(" ", "")
+        img_bytes = base64.b64decode(b64)
         path = storage.bytes_to_path(img_bytes)
 
         detect_result = detect_face(img_bytes)

@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
-import { AuthService } from '../../../core/services/auth.service';
 import { Tenant } from '../../../core/models/user.model';
 import { LucideAngularModule } from 'lucide-angular';
 import { SearchableSelectComponent, SSOption } from '../../../shared/components/searchable-select.component';
@@ -14,9 +14,9 @@ import { ToastService } from '../../../core/services/toast.service';
   template: `
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
       <div><h2>Usuarios del Sistema</h2><p class="text-muted text-sm">Gestiona instructores y aprendices</p></div>
-      <button class="btn-register" (click)="openModal()">
+      <button class="btn-register" (click)="goToRegister()">
         <lucide-icon name="plus" [size]="16"></lucide-icon>
-        Registrar usuario
+        Registro unitario
       </button>
     </div>
 
@@ -69,15 +69,22 @@ import { ToastService } from '../../../core/services/toast.service';
                 </div>
               </div>
             </td>
-            <td>{{ i.tipoDoc }} {{ i.numDoc }}</td>
+            <td>{{ i.tipoDoc ? i.tipoDoc + ' ' : '' }}{{ i.documento }}</td>
             <td>Instructor</td>
             <td>
-              <span class="status-badge" [class.status-active]="i.sesionActiva" [class.status-inactive]="!i.sesionActiva">
-                <span class="status-dot"></span>
-                {{ i.sesionActiva ? 'Activo' : 'Inactivo' }}
-              </span>
+              <label class="toggle-switch" title="Activo / Inactivo">
+                <input type="checkbox" [checked]="i.activo" (change)="toggleActivo(i, $event)">
+                <span class="slider"></span>
+              </label>
+              <span class="status-text">{{ i.activo ? 'Activo' : 'Inactivo' }}</span>
             </td>
-            <td>{{ i.municipio ?? '—' }}</td>
+            <td>
+              <div style="min-width:160px">
+                <app-ss [options]="municipiosOpts()" placeholder="Sin municipio"
+                        [ngModel]="i.municipio ?? ''"
+                        (ngModelChange)="setMunicipio(i, $event)"></app-ss>
+              </div>
+            </td>
             <td>
               <label class="toggle-switch">
                 <input type="checkbox" [checked]="i.esLider"
@@ -102,11 +109,7 @@ import { ToastService } from '../../../core/services/toast.service';
               </label>
             </td>
             <td>
-              <div style="min-width:160px">
-                <app-ss [options]="tenantsOpts()" placeholder="Sin sede"
-                        [ngModel]="i.tenantSlug ?? ''"
-                        (ngModelChange)="setTenant(i, $event)"></app-ss>
-              </div>
+              <span class="badge sede-badge">{{ i.tenantNombre || (tenants().find(t => t.slug === i.tenantSlug)?.nombre) || 'Sin sede' }}</span>
             </td>
           </tr>
           }
@@ -157,26 +160,29 @@ import { ToastService } from '../../../core/services/toast.service';
                 </div>
               </div>
             </td>
-            <td>{{ a.tipoDoc }} {{ a.numDoc }}</td>
+            <td>{{ a.tipoDoc ? a.tipoDoc + ' ' : '' }}{{ a.documento }}</td>
             <td class="text-xs text-muted">{{ a.correo || '—' }}</td>
             <td>
               @if (a.ficha) {
               <span class="badge active">{{ a.ficha.codigo }} — {{ a.ficha.programa }}</span>
               } @else { <span>—</span> }
             </td>
-            <td>{{ a.municipio ?? '—' }}</td>
-            <td>
-              <span class="status-badge" [class.status-active]="a.sesionActiva" [class.status-inactive]="!a.sesionActiva">
-                <span class="status-dot"></span>
-                {{ a.sesionActiva ? 'Activo' : 'Inactivo' }}
-              </span>
-            </td>
             <td>
               <div style="min-width:160px">
-                <app-ss [options]="tenantsOpts()" placeholder="Sin sede"
-                        [ngModel]="a.tenantSlug ?? ''"
-                        (ngModelChange)="setTenant(a, $event)"></app-ss>
+                <app-ss [options]="municipiosOpts()" placeholder="Sin municipio"
+                        [ngModel]="a.municipio ?? ''"
+                        (ngModelChange)="setMunicipio(a, $event)"></app-ss>
               </div>
+            </td>
+            <td>
+              <label class="toggle-switch" title="Activo / Inactivo">
+                <input type="checkbox" [checked]="a.activo" (change)="toggleActivo(a, $event)">
+                <span class="slider"></span>
+              </label>
+              <span class="status-text">{{ a.activo ? 'Activo' : 'Inactivo' }}</span>
+            </td>
+            <td>
+              <span class="badge sede-badge">{{ a.tenantNombre || (tenants().find(t => t.slug === a.tenantSlug)?.nombre) || 'Sin sede' }}</span>
             </td>
           </tr>
           }
@@ -190,76 +196,6 @@ import { ToastService } from '../../../core/services/toast.service';
     </div>
     }
 
-    <!-- MODAL REGISTRO UNITARIO -->
-    @if (showModal()) {
-    <div class="modal-overlay" (click)="closeModal()">
-      <div class="modal-box" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h3>Registrar usuario</h3>
-          <button class="modal-close" (click)="closeModal()">
-            <lucide-icon name="x" [size]="18"></lucide-icon>
-          </button>
-        </div>
-
-        <form (ngSubmit)="doRegister()" class="modal-body">
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">Rol *</label>
-              <select class="form-control" [(ngModel)]="regForm.rol" name="rol" required>
-                <option value="instructor">Instructor</option>
-                <option value="aprendiz">Aprendiz</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Documento *</label>
-              <input class="form-control" type="text" [(ngModel)]="regForm.numDoc" name="numDoc" required placeholder="12345678" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Nombre *</label>
-              <input class="form-control" type="text" [(ngModel)]="regForm.nombre" name="nombre" required placeholder="Nombre" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Apellido</label>
-              <input class="form-control" type="text" [(ngModel)]="regForm.apellido" name="apellido" placeholder="Apellido" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Correo *</label>
-              <input class="form-control" type="email" [(ngModel)]="regForm.correo" name="correo" required placeholder="correo@ejemplo.com" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Contraseña *</label>
-              <input class="form-control" type="password" [(ngModel)]="regForm.password" name="password" required placeholder="••••••••" />
-            </div>
-
-            @if (regForm.rol === 'aprendiz') {
-            <div class="form-group full-width">
-              <label class="form-label">Ficha *</label>
-              <app-ss [options]="fichasOpts()" placeholder="Seleccionar ficha..."
-                      [(ngModel)]="regForm.fichaId" name="fichaId"></app-ss>
-            </div>
-            }
-          </div>
-
-          @if (regError()) {
-            <div class="alert alert-error">{{ regError() }}</div>
-          }
-
-          <div class="modal-actions">
-            <button type="button" class="btn-outline" (click)="closeModal()">Cancelar</button>
-            <button type="submit" class="btn-submit" [disabled]="regLoading()">
-              @if (regLoading()) { <span class="spinner"></span> Registrando... }
-              @else { Registrar }
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-    }
   `,
   styles: [`
     /* ── Per-tab search bar (inside card) ───────────────────── */
@@ -335,6 +271,13 @@ import { ToastService } from '../../../core/services/toast.service';
     }
     .status-active .status-dot  { background: #16a34a; }
     .status-inactive .status-dot { background: #9ca3af; }
+    .status-text { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+    .badge.active { background: #dcfce7; color: #166534; }
+    .sede-badge { background: #eff6ff; color: #1e3a5f; border: 1px solid #bfdbfe; }
 
     /* Register button */
     .btn-register {
@@ -344,75 +287,23 @@ import { ToastService } from '../../../core/services/toast.service';
       font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .btn-register:hover { background: #2a4d7a; }
-
-    /* Modal */
-    .modal-overlay {
-      position: fixed; inset: 0; background: rgba(15,23,42,.55);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 9999; padding: 20px;
-    }
-    .modal-box {
-      background: #fff; border-radius: 12px;
-      width: 100%; max-width: 520px;
-      box-shadow: 0 20px 50px rgba(0,0,0,.2);
-    }
-    .modal-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 18px 20px; border-bottom: 1px solid var(--border, #e5e7eb);
-    }
-    .modal-header h3 { margin: 0; font-size: 16px; color: #111827; }
-    .modal-close {
-      background: none; border: none; cursor: pointer;
-      color: var(--text-muted, #6b7280);
-    }
-    .modal-body { padding: 20px; }
-    .modal-body .form-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-    }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group.full-width { grid-column: 1 / -1; }
-    .form-label { font-size: 12px; font-weight: 600; color: #374151; }
-    .form-control {
-      padding: 10px 12px; border: 1.5px solid #d1d5db;
-      border-radius: 8px; font-size: 13px; color: #111827; background: #fff;
-    }
-    .form-control:focus { outline: none; border-color: var(--navy, #1e3a5f); }
-    .alert-error {
-      background: #fee2e2; color: #991b1b;
-      padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 12px;
-    }
-    .modal-actions {
-      display: flex; justify-content: flex-end; gap: 10px;
-      margin-top: 18px;
-    }
-    .btn-outline {
-      padding: 10px 16px; border: 1.5px solid #d1d5db;
-      background: transparent; border-radius: 8px;
-      font-size: 13px; font-weight: 600; color: #374151; cursor: pointer;
-    }
-    .btn-submit {
-      padding: 10px 18px; background: var(--navy, #1e3a5f); color: #fff;
-      border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
-      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-    }
-    .btn-submit:disabled { opacity: .6; cursor: not-allowed; }
-    .spinner {
-      width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
-      border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    @media (max-width: 640px) {
-      .modal-body .form-grid { grid-template-columns: 1fr; }
-    }
   `],
 })
 export class AdminUsuariosComponent implements OnInit, OnDestroy {
   areas = signal<any[]>([]);
+  municipios = signal<any[]>([]);
 
   areasOpts = computed<SSOption[]>(() => [
     { value: '', label: 'Sin área' },
     ...this.areas().map(a => ({ value: a.nombre, label: a.nombre }))
+  ]);
+
+  municipiosOpts = computed<SSOption[]>(() => [
+    { value: '', label: 'Sin municipio' },
+    ...this.municipios().map(m => ({
+      value: m.nombre,
+      label: `${m.nombre} ${m.departamento_nombre ? '(' + m.departamento_nombre + ')' : ''}`
+    }))
   ]);
 
   tabs = [
@@ -425,25 +316,6 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
   admins = signal<any[]>([]);
   tenants = signal<Tenant[]>([]);
 
-  // Modal registro unitario
-  showModal = signal(false);
-  regLoading = signal(false);
-  regError = signal('');
-  fichas = signal<any[]>([]);
-  regForm: any = {
-    rol: 'instructor',
-    numDoc: '',
-    nombre: '',
-    apellido: '',
-    correo: '',
-    password: '',
-    fichaId: '',
-  };
-
-  fichasOpts = computed<SSOption[]>(() => [
-    { value: '', label: 'Seleccionar ficha...' },
-    ...this.fichas().map(f => ({ value: f.id, label: `${f.codigo} — ${f.programa}` })),
-  ]);
   tenantsOpts = computed<SSOption[]>(() => [
     { value: '', label: 'Sin sede' },
     ...this.tenants().map(t => ({ value: t.slug, label: t.nombre })),
@@ -476,7 +348,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     const q = this.searchSig();
     if (!q) return this.instructores();
     return this.instructores().filter(i =>
-      [i.nombre, i.apellido, i.numDoc, i.correo, i.municipio, i.areaLiderada]
+      [i.nombre, i.apellido, i.documento, i.correo, i.municipio, i.areaLiderada]
         .some(v => String(v ?? '').toLowerCase().includes(q))
     );
   });
@@ -485,7 +357,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     const q = this.searchSig();
     if (!q) return this.aprendices();
     return this.aprendices().filter(a =>
-      [a.nombre, a.apellido, a.numDoc, a.correo, a.municipio, a.ficha?.codigo, a.ficha?.programa]
+      [a.nombre, a.apellido, a.documento, a.correo, a.municipio, a.ficha?.codigo, a.ficha?.programa]
         .some(v => String(v ?? '').toLowerCase().includes(q))
     );
   });
@@ -503,7 +375,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
 
   private toast = inject(ToastService);
 
-  constructor(private api: ApiService, private auth: AuthService) {}
+  constructor(private api: ApiService, private router: Router) {}
 
   ngOnInit() {
     this.loadAll();
@@ -520,6 +392,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     this.api.getAprendices().subscribe(a => this.aprendices.set(a));
     this.api.getAdministradores().subscribe(a => this.admins.set(a));
     this.api.getAreas().subscribe(a => this.areas.set(a));
+    this.api.getMunicipios().subscribe(m => this.municipios.set(m ?? []));
     this.api.getTenants().subscribe(t => this.tenants.set(t ?? []));
   }
 
@@ -550,7 +423,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
   }
 
   setTenant(u: any, tenantSlug: string) {
-    const documento = u.numDoc || u.documento;
+    const documento = u.documento;
     this.api.updateTenant(documento, tenantSlug || null).subscribe({
       next: () => {
         const label = this.tenants().find(t => t.slug === tenantSlug)?.nombre ?? 'Sin sede';
@@ -559,6 +432,34 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
         this.toast.success('Sede actualizada', `${u.nombre} ahora pertenece a ${label}.`);
       },
       error: (e) => this.toast.error('Error al actualizar sede', e?.error?.message ?? 'No se pudo cambiar la sede.'),
+    });
+  }
+
+  setMunicipio(u: any, municipio: string) {
+    const documento = u.documento;
+    this.api.updateUsuarioMunicipio(documento, municipio || null).subscribe({
+      next: () => {
+        u.municipio = municipio || null;
+        this.toast.success('Municipio actualizado', `${u.nombre} ahora tiene asignado ${municipio || 'Sin municipio'}.`);
+      },
+      error: (e) => this.toast.error('Error al actualizar municipio', e?.error?.message ?? 'No se pudo cambiar el municipio.'),
+    });
+  }
+
+  toggleActivo(u: any, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    const documento = u.documento;
+    this.api.updateUsuarioActivo(documento, checked).subscribe({
+      next: () => {
+        u.activo = checked;
+        this.toast.success(
+          checked ? 'Usuario activado' : 'Usuario desactivado',
+          `${u.nombre} ${u.apellido ?? ''} ahora está ${checked ? 'activo' : 'inactivo'}.`,
+        );
+      },
+      error: (e) => {
+        this.toast.error('Error al cambiar estado', e?.error?.message ?? 'No se pudo actualizar el estado.');
+      },
     });
   }
 
@@ -578,52 +479,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     });
   }
 
-  openModal() {
-    this.regError.set('');
-    this.regForm = {
-      rol: 'instructor',
-      numDoc: '',
-      nombre: '',
-      apellido: '',
-      correo: '',
-      password: '',
-      fichaId: '',
-    };
-    this.api.getFichas().subscribe(f => this.fichas.set(f ?? []));
-    this.showModal.set(true);
-  }
-
-  closeModal() {
-    this.showModal.set(false);
-  }
-
-  doRegister() {
-    this.regError.set('');
-    const data = { ...this.regForm };
-    if (!data.numDoc || !data.nombre || !data.correo || !data.password) {
-      this.regError.set('Completa los campos obligatorios');
-      return;
-    }
-    if (data.rol === 'aprendiz' && !data.fichaId) {
-      this.regError.set('Selecciona una ficha para el aprendiz');
-      return;
-    }
-    if (data.rol === 'instructor') {
-      data.fichaId = undefined;
-    }
-
-    this.regLoading.set(true);
-    this.auth.register(data).subscribe({
-      next: () => {
-        this.regLoading.set(false);
-        this.toast.success('Usuario registrado', `${data.nombre} fue creado correctamente.`);
-        this.closeModal();
-        this.loadAll();
-      },
-      error: (e) => {
-        this.regLoading.set(false);
-        this.regError.set(e?.error?.message ?? 'Error al registrar usuario');
-      },
-    });
+  goToRegister() {
+    this.router.navigate(['/register']);
   }
 }

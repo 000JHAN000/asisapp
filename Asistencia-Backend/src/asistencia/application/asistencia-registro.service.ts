@@ -13,9 +13,9 @@ import { EstadoAsistencia } from '../domain/entities/asistencia.entity';
 import { CreateAsistenciaRegistroDto } from '../infrastructure/http/dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from '../infrastructure/http/dto/marcar-falla.dto';
 import { VerificarRostroDto } from '../infrastructure/http/dto/verificar-rostro.dto';
-import { AprendizCG } from '../../chronogest/entities/aprendiz-cg.entity';
-import { getBaseFacePath, getAttendanceFacePath, readFileToBase64, saveAttendanceFace } from '../../chronogest/utils/file-storage.util';
-import { TenantConnectionManager } from '../../infrastructure/persistence/tenants/tenant-connection.manager';
+import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
+import { getBaseFacePath, getAttendanceFacePath, readFileToBase64, saveAttendanceFace } from '../../infrastructure/utils/file-storage.util';
+import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5000';
@@ -47,27 +47,27 @@ export class AsistenciaRegistroService {
     return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaTenantEntity);
   }
 
-  private async getAprendizRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, AprendizCG);
+  private async getPersonaRepo() {
+    return this.connectionManager.getTenantRepository(this.tenantId, PersonaOrmEntity);
   }
 
   async verificarRostro(dto: VerificarRostroDto) {
-    const aprendizRepo = await this.getAprendizRepo();
-    const aprendiz = await aprendizRepo.findOne({
-      where: dto.documento ? { documento: dto.documento } : { id: dto.aprendizId }
+    const personaRepo = await this.getPersonaRepo();
+    const aprendiz = await personaRepo.findOne({
+      where: dto.documento ? { documento: dto.documento } : { id_persona: dto.aprendizId }
     });
     if (!aprendiz) throw new NotFoundException('Aprendiz no encontrado');
     if (!aprendiz.facePhotoPath) {
       throw new ForbiddenException('El aprendiz no tiene rostro registrado');
     }
 
-    const baseFacePath = getBaseFacePath(aprendiz.id);
+    const baseFacePath = getBaseFacePath(aprendiz.id_persona);
     if (!baseFacePath) {
       throw new ForbiddenException('Foto base no encontrada en el servidor');
     }
     const baseFaceB64 = readFileToBase64(baseFacePath);
 
-    const lastAttendancePath = getAttendanceFacePath(aprendiz.id);
+    const lastAttendancePath = getAttendanceFacePath(aprendiz.id_persona);
     const lastFaceB64 = lastAttendancePath ? readFileToBase64(lastAttendancePath) : null;
 
     try {
@@ -115,9 +115,9 @@ export class AsistenciaRegistroService {
       throw new ForbiddenException('El aprendiz ya registró su asistencia');
     }
 
-    const aprendizRepo = await this.getAprendizRepo();
-    const aprendiz = await aprendizRepo.findOne({
-      where: dto.documento ? { documento: dto.documento } : { id: dto.aprendizId }
+    const personaRepo = await this.getPersonaRepo();
+    const aprendiz = await personaRepo.findOne({
+      where: dto.documento ? { documento: dto.documento } : { id_persona: dto.aprendizId }
     });
     if (!aprendiz) throw new NotFoundException('Aprendiz no encontrado');
     if (!aprendiz.facePhotoPath) {
@@ -126,7 +126,7 @@ export class AsistenciaRegistroService {
 
     let attendancePhotoPath: string | null = null;
     if (dto.faceVerificationImage) {
-      attendancePhotoPath = saveAttendanceFace(aprendiz.id, dto.faceVerificationImage);
+      attendancePhotoPath = saveAttendanceFace(aprendiz.id_persona, dto.faceVerificationImage);
     }
 
     let asistenciaId: string | null = null;
@@ -136,7 +136,7 @@ export class AsistenciaRegistroService {
       let asistencia = await asistenciaRepo.findOne({
         where: {
           formacion_fk: sesion.formacionAsistenciaId,
-          aprendizId: aprendiz.id,
+          aprendizId: aprendiz.id_persona,
         },
       });
       if (asistencia) {
@@ -147,7 +147,7 @@ export class AsistenciaRegistroService {
         asistencia = await asistenciaRepo.save(
           asistenciaRepo.create({
             formacion_fk: sesion.formacionAsistenciaId,
-            aprendizId: aprendiz.id,
+            aprendizId: aprendiz.id_persona,
             estado: EstadoAsistencia.asistio,
             hora: horaActual,
           }),
@@ -158,7 +158,7 @@ export class AsistenciaRegistroService {
 
     const registro = registroRepo.create({
       sesionId: dto.sesionId,
-      aprendizId: aprendiz.id,
+      aprendizId: aprendiz.id_persona,
       estado: 'presente',
       firmaImagen: dto.firmaImagen,
       facePhotoPath: attendancePhotoPath,
@@ -172,7 +172,7 @@ export class AsistenciaRegistroService {
     const saved = Array.isArray(savedResult) ? savedResult[0] : savedResult;
 
     if (attendancePhotoPath) {
-      await aprendizRepo.update(aprendiz.id, {
+      await personaRepo.update({ id_persona: aprendiz.id_persona }, {
         lastAttendancePhotoPath: attendancePhotoPath,
       });
     }
@@ -188,12 +188,12 @@ export class AsistenciaRegistroService {
     }
 
     (saved as any).aprendiz = {
-      id: aprendiz.id,
-      nombre: aprendiz.nombre,
-      apellido: aprendiz.apellido,
+      id: aprendiz.id_persona,
+      nombre: aprendiz.nombres,
+      apellido: aprendiz.apellidos,
       correo: aprendiz.correo,
       numDoc: aprendiz.documento,
-      fichaId: aprendiz.fichaId,
+      fichaId: aprendiz.matriculas?.[0]?.curso_fk ?? null,
       facePhoto: facePhotoB64,
     };
     (saved as any).lastAttendancePhoto = lastAttendancePhotoB64;

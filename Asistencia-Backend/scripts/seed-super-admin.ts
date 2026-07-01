@@ -12,7 +12,7 @@ async function bootstrap() {
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'sena_db',
-    entities: ['src/chronogest/entities/usuario-cg.entity.ts'],
+    entities: ['src/usuario/infrastructure/entities/usuario-maestro.orm-entity.ts'],
     synchronize: false,
   });
 
@@ -23,7 +23,7 @@ async function bootstrap() {
   const passwordPlain = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin1234!';
 
   const existing = await dataSource.query(
-    'SELECT id FROM cg_usuarios WHERE correo = $1 OR documento = $2',
+    'SELECT id FROM auth.usuario_maestro WHERE correo = $1 OR documento = $2',
     [correo, documento],
   );
 
@@ -36,7 +36,7 @@ async function bootstrap() {
   const password = await hash(passwordPlain, 10);
 
   await dataSource.query(
-    `INSERT INTO cg_usuarios (correo, documento, password, rol, activo, tenant_slug)
+    `INSERT INTO auth.usuario_maestro (correo, documento, password, rol, activo, tenant_slug)
      VALUES ($1, $2, $3, 'super_admin', true, null)`,
     [correo, documento, password],
   );

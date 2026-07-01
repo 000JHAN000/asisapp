@@ -32,8 +32,7 @@ import { AccesoModule }        from './acceso/acceso.module';
 import { QueuesModule } from './queues/queues.module';
 import { AsistenciaModule }    from './asistencia/asistencia.module';
 import { HorarioModule }       from './horario/horario.module';
-import { ChronogestModule }    from './chronogest/chronogest.module';
-import { TenantModule }          from './infrastructure/persistence/tenants/tenant.module';
+import { TenantModule }          from './auth/infrastructure/persistence/tenants/tenant.module';
 import { TenantMiddleware }      from './infrastructure/middleware/tenant.middleware';
 import { SuperAdminModule }      from './super-admin/super-admin.module';
 
@@ -109,7 +108,6 @@ import { SuperAdminModule }      from './super-admin/super-admin.module';
     AsistenciaModule,
     HorarioModule,
     QueuesModule,
-    ChronogestModule,
     TenantModule,
     SuperAdminModule,
   ],

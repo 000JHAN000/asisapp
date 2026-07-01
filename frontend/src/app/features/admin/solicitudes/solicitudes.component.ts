@@ -289,7 +289,7 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class AdminSolicitudesComponent implements OnInit {
   readonly LABELS = DIAS_LABELS;
-  readonly BASE_URL = 'http://localhost:3001';
+  readonly BASE_URL = 'http://127.0.0.1:3001';
 
   solicitudes = signal<any[]>([]);
   ambientesList = signal<any[]>([]);

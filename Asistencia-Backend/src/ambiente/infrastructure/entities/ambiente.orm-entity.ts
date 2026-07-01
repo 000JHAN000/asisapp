@@ -8,8 +8,14 @@ export class AmbienteOrmEntity {
   @PrimaryGeneratedColumn('uuid')
   id_ambiente: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 100 })
   nombre: string;
+
+  @Column({ type: 'int', nullable: true })
+  capacidad: number | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  tipo: string | null;
 
   @Column('uuid')
   area_fk: string;

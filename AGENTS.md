@@ -20,15 +20,14 @@ Los scripts de inicialización se encuentran en:
 ```
 docker/postgres/init/
 ├── 01-create-tenant-dbs.sql      # Crea las BDs físicas de cada sede
-├── 02-create-tenants-table.sql   # Crea la tabla tenants e inserta las sedes
-└── 03-migrate-users-tenant.sql   # Asigna Yamborot a usuarios existentes
+└── 02-create-tenants-table.sql   # Crea el esquema auth y la tabla auth.tenants
 ```
 
 Estos scripts se montan en `/docker-entrypoint-initdb.d` del contenedor PostgreSQL y se ejecutan automáticamente la primera vez que se levanta el volumen.
 
 ### Asignación de sede por usuario
 
-La sede no se elige en el login. Cada usuario tiene una sede asignada en el campo `tenant_slug` de la tabla `cg_usuarios`:
+La sede no se elige en el login. Cada usuario tiene una sede asignada en el campo `tenant_slug` de la tabla `usuario_maestro`:
 
 - **Usuarios existentes**: se migraron a `yamborot` por defecto.
 - **Nuevos usuarios**: durante el registro pueden seleccionar una sede del catálogo disponible. Si se registran sin sede (`tenant_slug` es `null`), el administrador debe asignarles una sede desde la pantalla **Usuarios** para que puedan iniciar sesión.
@@ -47,7 +46,7 @@ El frontend envía el header `x-tenant-id` en cada petición autenticada con el 
 El flujo de autenticación es:
 
 1. El usuario ingresa solo correo/documento y contraseña.
-2. El backend busca el usuario en `cg_usuarios`.
+2. El backend busca el usuario en `usuario_maestro`.
 3. Si el usuario no tiene `tenant_slug`, rechaza el login con el mensaje:  
    `"No tienes una sede asignada. Contacta al administrador."`
 4. Si tiene sede, valida que exista en el catálogo y devuelve `tenantSlug` + `tenantNombre` en la respuesta.
@@ -70,17 +69,35 @@ Body: { documento: string, tenantSlug: string | null }
 
 Permite al administrador asignar o cambiar la sede de un usuario por su número de documento.
 
+### Endpoint de activación/inactivación de usuario
+
+```
+PATCH /api/usuarios/activo
+Body: { documento: string, activo: boolean }
+```
+
+Permite al administrador activar o desactivar un usuario. Un usuario inactivo no puede iniciar sesión.
+
+### Endpoint de municipio de usuario
+
+```
+PATCH /api/usuarios/municipio
+Body: { documento: string, municipio: string | null }
+```
+
+Permite al administrador asignar o cambiar el municipio de un usuario.
+
 ### Flujo en el frontend
 
 1. El usuario llega al login y escribe sus credenciales.
 2. El backend determina la sede y el frontend la guarda automáticamente.
 3. El `app-layout` muestra un badge con el nombre de la sede actual.
 4. Si un usuario autenticado no tiene sede seleccionada, se le cierra la sesión.
-5. En la pantalla **Usuarios → Instructores/Aprendices/Administradores**, el admin puede asignar/cambiar la sede de cada usuario.
+5. En la pantalla **Usuarios → Instructores/Aprendices**, el admin puede asignar/cambiar la sede, activar/desactivar y ver documento, ficha y municipio de cada usuario.
 
 ### Alcance actual
 
-Por ahora el catálogo de tenants y las BDs físicas están creadas, pero **los repositorios de negocio aún usan el DataSource maestro** (`sena_db`). El aislamiento completo de datos por sede se activará en una fase posterior. Esto permite que el sistema siga funcionando igual mientras se prepara la arquitectura.
+Por ahora el catálogo de tenants y las BDs físicas están creadas. La autenticación de sedes, la administración de horarios/competencias/eventos/notificaciones/solicitudes/configuración, la gestión de instructores/aprendices/administradores y el módulo de asistencia operan sobre el modelo legacy conectado por tenant. Las tablas `cg_*` fueron eliminadas de las bases de datos tenant una vez validada la migración; los respaldos previos al borrado se guardan en `backups/cg_drop_<fecha>/`. La base maestra `sena_db` conserva `tenants` (catálogo de sedes) y `usuario_maestro` (credenciales, rol, sede y datos de perfil). El resto de tablas `cg_*` fueron eliminadas de `sena_db` y de `test_sede_db3`.
 
 ### Agregar una nueva sede en el futuro
 
@@ -89,22 +106,40 @@ Por ahora el catálogo de tenants y las BDs físicas están creadas, pero **los 
 3. Reiniciar el backend para que el catálogo se recargue (el middleware valida contra BD en cada petición).
 4. Asignar usuarios a la nueva sede desde la pantalla de Usuarios.
 
+### Migración a tablas legacy conectadas (en progreso)
+
+Los endpoints de autenticación (`/api/auth`) y administración de horarios (`/api/horarios-admin/*`, `/api/competencias`, `/api/eventos`, `/api/notificaciones`, `/api/solicitudes`, `/api/configuracion`) ya no usan las tablas desconectadas `cg_*`; operan sobre el modelo legacy conectado por tenant (`persona`, `usuario`, `credencial`, `rol`, `instructor`, `administrador`, `curso`, `ambiente`, `horario`, `matricula`, `competencia`, `evento`, `notificacion`, `solicitud_cambio`, `configuracion_app`).
+
+- Scripts de migración de datos (raíz del proyecto):
+  - `migrar_tenant_legacy.sql`: migra instructores, aprendices, administradores, cursos, ambientes, matrículas y horarios; incluye corrección robusta de `instructor_fk`.
+  - `migrar_cg_extras.sql`: migra competencias, eventos, notificaciones, solicitudes de cambio y configuración; es idempotente.
+- Servicios legacy conectados:
+  - `HorariosAdminCGService`
+  - `CompetenciasCGService`
+  - `EventosCGService`
+  - `NotificacionesCGService`
+  - `SolicitudesCGService`
+  - `ConfiguracionCGService`
+
 ### Archivos clave
 
 Backend:
 - `src/infrastructure/middleware/tenant.middleware.ts`
 - `src/infrastructure/config/tenant-context.ts`
-- `src/infrastructure/persistence/tenants/tenant-connection.manager.ts`
-- `src/infrastructure/persistence/tenants/tenant-data-source.provider.ts`
-- `src/infrastructure/persistence/tenants/tenant.module.ts`
-- `src/tenants/infrastructure/http/tenants.controller.ts`
-- `src/chronogest/entities/usuario-cg.entity.ts`
-- `src/chronogest/services/auth-cg.service.ts`
-- `src/chronogest/services/usuarios-cg.service.ts`
-- `src/chronogest/controllers/usuarios-cg.controller.ts`
-- `src/chronogest/services/instructores.service.ts`
-- `src/chronogest/services/aprendices.service.ts`
-- `src/chronogest/services/administradores.service.ts`
+- `src/auth/infrastructure/persistence/tenants/tenant-connection.manager.ts`
+- `src/auth/infrastructure/persistence/tenants/tenant-data-source.provider.ts`
+- `src/auth/infrastructure/persistence/tenants/tenant.module.ts`
+- `src/auth/infrastructure/http/tenants.controller.ts`
+- `src/auth/infrastructure/http/tenants-admin.controller.ts`
+- `src/auth/infrastructure/entities/usuario-maestro.orm-entity.ts`
+- `src/auth/application/tenant-provisioning.service.ts`
+- `src/auth/application/auth-cg.service.ts`
+- `src/horario/application/horarios-admin-cg.service.ts`
+- `src/modulo/application/competencias-cg.service.ts`
+- `src/aplicativo/application/eventos-cg.service.ts`
+- `src/aplicativo/application/notificaciones-cg.service.ts`
+- `src/aplicativo/application/solicitudes-cg.service.ts`
+- `src/aplicativo/application/configuracion-cg.service.ts`
 
 Frontend:
 - `src/app/features/auth/login.component.ts`

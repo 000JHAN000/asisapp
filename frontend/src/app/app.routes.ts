@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard, roleGuard } from './core/guards/auth.guard';
 import { superAdminGuard } from './core/guards/super-admin.guard';
+import { registerGuard } from './core/guards/register.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'landing', pathMatch: 'full' },
@@ -167,6 +168,14 @@ export const routes: Routes = [
       },
     ],
   },
+  // ── Registro unitario desde el panel admin ───────────────────────────────
+  {
+    path: 'register',
+    canActivate: [registerGuard],
+    loadComponent: () =>
+      import('./features/auth/login.component').then((m) => m.LoginComponent),
+  },
+
   // ── Super Admin ──────────────────────────────────────────────────────────
   {
     path: 'super-admin',

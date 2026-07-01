@@ -105,7 +105,7 @@ export class AprendizRegistroFacialComponent implements OnInit {
   }
 
   checkStatus() {
-    this.http.get<{ hasFace: boolean; facePhoto: string | null }>('http://localhost:3001/api/aprendices/me/face-status')
+    this.http.get<{ hasFace: boolean; facePhoto: string | null }>('http://127.0.0.1:3001/api/aprendices/me/face-status')
       .subscribe({
         next: (res) => {
           this.hasFace.set(res.hasFace);
@@ -122,7 +122,7 @@ export class AprendizRegistroFacialComponent implements OnInit {
   onCaptured(imageBase64: string) {
     this.processing.set(true);
     this.http.post<{ success: boolean; message: string }>(
-      'http://localhost:3001/api/aprendices/me/register-face',
+      'http://127.0.0.1:3001/api/aprendices/me/register-face',
       { image: imageBase64 },
     ).subscribe({
       next: (res) => {

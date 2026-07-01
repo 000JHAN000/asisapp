@@ -28,11 +28,9 @@ import { ASISTENCIA_REPOSITORY } from './domain/ports/asistencia.repository.port
 import { FORMACION_ASISTENCIA_REPOSITORY } from './domain/ports/formacion-asistencia.repository.port';
 import { CONFIGURACION_ASISTENCIA_REPOSITORY } from './domain/ports/configuracion-asistencia.repository.port';
 
-import { AprendizCG } from '../chronogest/entities/aprendiz-cg.entity';
-import { HorarioCG } from '../chronogest/entities/horario-cg.entity';
 
 import { QueuesModule } from 'src/queues/queues.module';
-import { TenantModule } from '../infrastructure/persistence/tenants/tenant.module';
+import { TenantModule } from 'src/auth/infrastructure/persistence/tenants/tenant.module';
 
 @Module({
   imports: [
@@ -42,8 +40,6 @@ import { TenantModule } from '../infrastructure/persistence/tenants/tenant.modul
       ConfiguracionAsistenciaOrmEntity,
       AsistenciaSesionOrmEntity,
       AsistenciaRegistroOrmEntity,
-      AprendizCG,
-      HorarioCG,
     ]),
     HttpModule,
     TenantModule,

@@ -1661,7 +1661,12 @@ export class InstructorMisHorariosComponent implements OnInit, OnDestroy {
       this.cargarDatos();
       this.toast.success('Clase iniciada', 'La clase fue marcada como activa correctamente.');
       // Crear sesión de asistencia automáticamente para que los aprendices puedan firmar
-      this.asistencia.crearSesion({ horarioId: h.id }).subscribe({
+      this.asistencia.crearSesion({ 
+        horarioId: h.id,
+        fecha: new Date().toISOString().split('T')[0],
+        horaInicio: h.horaInicio,
+        horaFin: h.horaFin
+      }).subscribe({
         next: () => {},
         error: (err: any) => {
           const msg = err?.error?.message ?? '';
