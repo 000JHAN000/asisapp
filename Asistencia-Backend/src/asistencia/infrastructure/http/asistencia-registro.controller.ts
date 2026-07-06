@@ -5,6 +5,7 @@ import { MarcarFallaDto } from './dto/marcar-falla.dto';
 import { VerificarRostroDto } from './dto/verificar-rostro.dto';
 import { emitFirma } from './asistencia-sesion.controller';
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
+import { normalizeIp } from 'src/infrastructure/utils/ip.util';
 
 @Controller('asistencia/registros')
 export class AsistenciaRegistroController {
@@ -31,6 +32,15 @@ export class AsistenciaRegistroController {
     if (req.user && req.user.documento) {
       dto.documento = req.user.documento;
     }
+    // La IP del cliente no debe depender de un servicio externo (api.ipify.org):
+    // la tomamos directamente de la conexión/cabecera del proxy y la normalizamos
+    // a IPv4 (por ej. ::ffff:192.168.1.1 -> 192.168.1.1).
+    const forwarded = req.headers['x-forwarded-for'];
+    const rawIp = (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined)
+      || req.ip
+      || req.socket?.remoteAddress
+      || dto.ipAddress;
+    dto.ipAddress = normalizeIp(rawIp);
     const registro = await this.registroService.registrarFirma(dto);
     console.log('[SSE] Emitiendo firma para sesión:', dto.sesionId, 'aprendiz:', dto.aprendizId);
     emitFirma(dto.sesionId, registro);

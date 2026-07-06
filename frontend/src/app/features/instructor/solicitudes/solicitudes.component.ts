@@ -350,7 +350,7 @@ export class InstructorSolicitudesComponent implements OnInit {
     if (user?.id) {
       this.api.getSolicitudesByInstructor(user.id).subscribe(s => this.misSolicitudes.set(s));
     }
-    this.api.getAmbientes().subscribe(a => this.ambientes.set(a));
+    this.api.getHAmbientes().subscribe(a => this.ambientes.set(a));
   }
 
   limpiarFiltros() {

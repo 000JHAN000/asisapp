@@ -313,7 +313,7 @@ export class AdminSolicitudesComponent implements OnInit {
 
   ngOnInit() {
     this.cargar();
-    this.api.getAmbientes().subscribe(a => this.ambientesList.set(a));
+    this.api.getHAmbientes().subscribe(a => this.ambientesList.set(a));
   }
 
   cargar() {

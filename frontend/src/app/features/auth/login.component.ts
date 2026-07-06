@@ -84,9 +84,6 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
           <div class="login-links">
             <button class="link-btn" (click)="goToPin()">¿No tienes acceso? Registrarse</button>
           </div>
-          <div class="login-links">
-            <a routerLink="/super-admin/login" class="link-btn">Acceso super administrador</a>
-          </div>
         </div>
         }
 
@@ -570,17 +567,14 @@ export class LoginComponent implements OnInit {
       next: (res) => {
         this.loading.set(false);
         const role = res.user.rol;
-        if (role === 'admin') this.router.navigate(['/app/admin/dashboard']);
+        if (role === 'super_admin') this.router.navigate(['/super-admin/tenants']);
+        else if (role === 'admin') this.router.navigate(['/app/admin/dashboard']);
         else if (role === 'instructor') this.router.navigate(['/app/instructor/dashboard']);
         else this.router.navigate(['/app/aprendiz/dashboard']);
       },
       error: (e) => {
         this.loading.set(false);
         const msg = e?.error?.message ?? 'Credenciales inválidas';
-        if (typeof msg === 'string' && msg.toLowerCase().includes('super administradores')) {
-          this.router.navigate(['/super-admin/login']);
-          return;
-        }
         this.error.set(msg);
       },
     });
@@ -606,7 +600,7 @@ export class LoginComponent implements OnInit {
   }
 
   loadFichas() {
-    this.api.getFichas().subscribe({
+    this.api.getHFichas().subscribe({
       next: (f) => {
         this.fichas.set(f ?? []);
         const unique = [...new Set((f ?? []).map((x: any) => x.area).filter(Boolean))].sort() as string[];

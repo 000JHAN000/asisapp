@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, computed, viewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, viewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/services/api.service';
 import { AsistenciaService } from '../../../core/services/asistencia/asistencia.service';
@@ -18,6 +18,9 @@ import { jsPDF } from 'jspdf';
         <h2>Gestión de Asistencia</h2>
         <p class="text-muted text-sm">Control de firmas en tiempo real</p>
       </div>
+      <button class="btn btn-white btn-sm" (click)="abrirReporteMensual()">
+        <lucide-icon name="calendar" [size]="14"></lucide-icon> Reporte Mensual
+      </button>
     </div>
 
     @if (!sesionActiva()) {
@@ -502,6 +505,167 @@ import { jsPDF } from 'jspdf';
         </div>
       </div>
     }
+
+    <!-- Modal de Reporte Mensual -->
+    @if (reporteMensualOpen()) {
+      <div class="modal-overlay" style="z-index:300; overflow:auto; align-items:flex-start; padding:24px;">
+        <div class="modal reporte-modal" style="max-width:960px;" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>Reporte Mensual de Asistencia</h3>
+            <button class="btn-icon" (click)="cerrarReporteMensual()"><lucide-icon name="x" [size]="18"></lucide-icon></button>
+          </div>
+
+          <!-- Filtros -->
+          <div class="rm-filtros">
+            <div class="form-group">
+              <label class="form-label">Ficha</label>
+              <select class="form-control" [ngModel]="fichaSeleccionadaReporte()" (ngModelChange)="fichaSeleccionadaReporte.set($event)">
+                <option value="">Selecciona una ficha...</option>
+                @for (f of fichasInstructor(); track f.id) {
+                  <option [value]="f.id">{{ f.codigo }} — {{ f.programa }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mes</label>
+              <input type="month" class="form-control" [ngModel]="mesReporte()" (ngModelChange)="mesReporte.set($event)">
+            </div>
+            <button class="btn btn-blue" [disabled]="cargandoReporteMensual() || !fichaSeleccionadaReporte() || !mesReporte()" (click)="generarReporteMensual()">
+              @if (cargandoReporteMensual()) {
+                <span class="spin">⟳</span> Buscando...
+              } @else {
+                <lucide-icon name="search" [size]="14"></lucide-icon> Buscar
+              }
+            </button>
+          </div>
+
+          @if (reporteMensualData()) {
+            @if (reporteMensualData().totalSesiones === 0) {
+              <div class="empty-state mt-3">
+                <lucide-icon name="calendar-x" [size]="32" style="opacity:.4"></lucide-icon>
+                <p>No hubo clases dictadas para esta ficha en el mes seleccionado</p>
+              </div>
+            } @else {
+              <div id="reporte-mensual-content" class="reporte-content mt-3">
+                <!-- Encabezado -->
+                <div class="rep-header">
+                  <div class="rep-logo">SENA</div>
+                  <div class="rep-info">
+                    <h2>REPORTE MENSUAL DE ASISTENCIA</h2>
+                    <p><strong>Ficha:</strong> {{ fichaNombreReporte() }}</p>
+                    <p><strong>Mes:</strong> {{ nombreMesReporte() }} | <strong>Instructor:</strong> {{ user()?.nombre }} {{ user()?.apellido }}</p>
+                    <p><strong>Generado el:</strong> {{ hoy() | date:'dd/MM/yyyy' }}</p>
+                  </div>
+                </div>
+
+                <!-- Resumen por aprendiz -->
+                <h4 class="rep-table-title">RESUMEN DEL MES POR APRENDIZ</h4>
+                <table class="rep-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Aprendiz</th>
+                      <th>Documento</th>
+                      <th>Clases</th>
+                      <th>Presentes</th>
+                      <th>Ausencias</th>
+                      <th>Justificadas</th>
+                      <th>% Asistencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (r of reporteMensualData().resumenAprendices; track r.aprendizId; let i = $index) {
+                      <tr>
+                        <td>{{ i + 1 }}</td>
+                        <td>{{ r.apellido }}, {{ r.nombre }}</td>
+                        <td>{{ r.documento }}</td>
+                        <td>{{ r.totalSesiones }}</td>
+                        <td><span class="rep-badge rep-b-presente">{{ r.presentes }}</span></td>
+                        <td>
+                          @if (r.ausencias > 0) {
+                            <span class="rep-badge" style="background:#fee2e2;color:#991b1b">{{ r.ausencias }}</span>
+                          } @else { 0 }
+                        </td>
+                        <td>
+                          @if (r.justificadas > 0) {
+                            <span class="rep-badge rep-b-falla">{{ r.justificadas }}</span>
+                          } @else { 0 }
+                        </td>
+                        <td>{{ r.porcentajeAsistencia }}%</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+
+                <!-- Tablas semanales -->
+                @for (semana of reporteMensualData().semanas; track semana.numero) {
+                  <h4 class="rep-table-title">SEMANA {{ semana.numero }} ({{ formatFechaCorta(semana.fechaInicio) }} — {{ formatFechaCorta(semana.fechaFin) }})</h4>
+                  <table class="rep-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Aprendiz</th>
+                        <th>Documento</th>
+                        <th>Hora</th>
+                        <th>IP</th>
+                        <th>Estado</th>
+                        <th>Firma</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (fila of semana.filas; track fila.sesionId + '_' + fila.aprendizId; let i = $index) {
+                        <tr>
+                          <td>{{ i + 1 }}</td>
+                          <td>{{ formatFechaCorta(fila.fecha) }}</td>
+                          <td>{{ fila.apellido }}, {{ fila.nombre }}</td>
+                          <td>{{ fila.documento }}</td>
+                          <td>{{ fila.horaRegistro ? (fila.horaRegistro | date:'HH:mm') : '—' }}</td>
+                          <td>
+                            @if (fila.ipAddress) { <span class="rep-ip-badge">{{ fila.ipAddress }}</span> }
+                            @else { <span style="color:#9ca3af">—</span> }
+                          </td>
+                          <td>
+                            @if (fila.estado === 'presente') {
+                              <span class="rep-badge rep-b-presente">Presente</span>
+                            } @else if (fila.estado === 'falla_justificada') {
+                              <span class="rep-badge rep-b-falla">Falla Just.</span>
+                            } @else {
+                              <span class="rep-badge" style="background:#fee2e2;color:#991b1b">Ausente</span>
+                            }
+                          </td>
+                          <td>
+                            @if (fila.firmaImagen) { <img [src]="fila.firmaImagen" class="rep-firma"> }
+                            @else { <span style="color:#9ca3af">—</span> }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+
+                <div class="rep-footer">
+                  <p><strong>Reporte generado el:</strong> {{ hoy() | date:'dd/MM/yyyy HH:mm' }} | <strong>Servicio Nacional de Aprendizaje - SENA</strong></p>
+                </div>
+              </div>
+            }
+          }
+
+          <div class="rep-actions">
+            <button class="btn btn-outline" (click)="cerrarReporteMensual()">Cerrar</button>
+            @if (reporteMensualData() && reporteMensualData().totalSesiones > 0) {
+              <button class="btn btn-blue" [disabled]="reporteMensualGenerando()" (click)="descargarReporteMensualPDF()">
+                @if (reporteMensualGenerando()) {
+                  <span class="spin">⟳</span> Generando...
+                } @else {
+                  <lucide-icon name="download" [size]="14"></lucide-icon> Descargar PDF
+                }
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     /* ── Base ─────────────────────────────────────────── */
@@ -677,6 +841,8 @@ import { jsPDF } from 'jspdf';
     /* ── Reporte Modal ────────────────────────────────── */
     .reporte-modal { background: #f1f5f9; padding: 0; overflow: hidden; }
     .reporte-content { background: #fff; padding: 24px; margin: 0; }
+    .rm-filtros { display: flex; align-items: flex-end; gap: 12px; padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .rm-filtros .form-group { min-width: 200px; }
     .rep-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; border-bottom: 3px solid #00324d; padding-bottom: 14px; }
     .rep-logo { width: 60px; height: 60px; background: #00324d; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; border-radius: 6px; flex-shrink: 0; }
     .rep-info { flex: 1; }
@@ -742,6 +908,26 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
   reporteModalOpen = signal(false);
   reporteGenerando = signal(false);
   hoy = signal(new Date());
+
+  // ── Reporte mensual ──────────────────────────────────────────────
+  reporteMensualOpen = signal(false);
+  reporteMensualGenerando = signal(false);
+  cargandoReporteMensual = signal(false);
+  fichasInstructor = signal<any[]>([]);
+  fichaSeleccionadaReporte = signal<string>('');
+  mesReporte = signal<string>('');
+  reporteMensualData = signal<any>(null);
+
+  fichaNombreReporte = computed(() => {
+    const f = this.fichasInstructor().find((x: any) => x.id === this.fichaSeleccionadaReporte());
+    return f ? `${f.codigo} — ${f.programa}` : '';
+  });
+  nombreMesReporte = computed(() => {
+    const [anioStr, mesStr] = (this.mesReporte() || '').split('-');
+    if (!anioStr || !mesStr) return '';
+    const nombres = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return `${nombres[parseInt(mesStr, 10) - 1]} de ${anioStr}`;
+  });
 
   sesionForm = { fecha: '', horaInicio: '', horaFin: '' };
 
@@ -813,6 +999,7 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
     private asistencia: AsistenciaService,
     private auth: AuthService,
     private toast: ToastService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
@@ -834,7 +1021,7 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
       const diaActual = dias[hoy.getDay()];
       const filtrados = list.filter((h: any) => h.diaSemana === diaActual);
       
-      this.api.getFichas().subscribe((fichas: any[]) => {
+      this.api.getHFichas().subscribe((fichas: any[]) => {
         const enriquecidos = filtrados.map(h => ({
           ...h,
           ficha: fichas.find(f => String(f.id) === String(h.fichaId))
@@ -900,12 +1087,14 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
       this.registros.set(sesion.registros ?? []);
       this.cargarPendientes(sesionId);
       this.conectarSSE(sesionId);
+      this.cdr.detectChanges();
     });
   }
 
   cargarPendientes(sesionId: number) {
     this.asistencia.getPendientes(sesionId).subscribe((list: any) => {
       this.pendientes.set(list);
+      this.cdr.detectChanges();
     });
   }
 
@@ -926,6 +1115,7 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
             return [...regs, data.registro];
           });
           this.cargarPendientes(sesionId);
+          this.cdr.detectChanges();
         }
       } catch (_) {}
     };
@@ -1035,5 +1225,100 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
 
   cerrarReporte() {
     this.reporteModalOpen.set(false);
+  }
+
+  // ── Reporte mensual ──────────────────────────────────────────────
+  abrirReporteMensual() {
+    this.reporteMensualData.set(null);
+    if (!this.mesReporte()) {
+      const hoy = new Date();
+      this.mesReporte.set(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`);
+    }
+    this.reporteMensualOpen.set(true);
+    this.cargarFichasInstructor();
+  }
+
+  cargarFichasInstructor() {
+    const uid = this.user()?.perfilId;
+    if (!uid) return;
+    this.api.getHorariosByInstructor(uid).subscribe((list: any[]) => {
+      const fichaIds = [...new Set(list.map((h: any) => h.fichaId).filter(Boolean))];
+      this.api.getHFichas().subscribe((fichas: any[]) => {
+        const propias = fichas.filter((f: any) => fichaIds.includes(f.id));
+        this.fichasInstructor.set(propias);
+        if (!this.fichaSeleccionadaReporte() && propias.length) {
+          this.fichaSeleccionadaReporte.set(propias[0].id);
+        }
+        this.cdr.detectChanges();
+      });
+    });
+  }
+
+  generarReporteMensual() {
+    const fichaId = this.fichaSeleccionadaReporte();
+    const mes = this.mesReporte();
+    if (!fichaId || !mes) return;
+    const [anioStr, mesStr] = mes.split('-');
+    this.cargandoReporteMensual.set(true);
+    this.asistencia.getReporteMensual(fichaId, parseInt(anioStr, 10), parseInt(mesStr, 10)).subscribe({
+      next: (data: any) => {
+        this.reporteMensualData.set(data);
+        this.cargandoReporteMensual.set(false);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.error('Error al generar el reporte mensual');
+        this.cargandoReporteMensual.set(false);
+      },
+    });
+  }
+
+  cerrarReporteMensual() {
+    this.reporteMensualOpen.set(false);
+  }
+
+  formatFechaCorta(fecha: string): string {
+    if (!fecha) return '—';
+    const [anio, mes, dia] = fecha.split('-');
+    return `${dia}/${mes}/${anio}`;
+  }
+
+  async descargarReporteMensualPDF() {
+    const el = document.getElementById('reporte-mensual-content');
+    if (!el) return;
+    this.reporteMensualGenerando.set(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const ficha = this.fichasInstructor().find((f: any) => f.id === this.fichaSeleccionadaReporte());
+      pdf.save(`ReporteMensual_${ficha?.codigo ?? 'ficha'}_${this.mesReporte()}.pdf`);
+      this.toast.success('Reporte mensual descargado correctamente');
+    } catch (e) {
+      this.toast.error('Error al generar PDF');
+    } finally {
+      this.reporteMensualGenerando.set(false);
+    }
   }
 }

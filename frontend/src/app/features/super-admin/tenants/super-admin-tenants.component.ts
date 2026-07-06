@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
-import { SuperAdminAuthService } from '../../../core/services/super-admin-auth.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { SuperAdminTenantService, SuperAdminTenant, CreateTenantInput } from '../../../core/services/super-admin-tenant.service';
 
 @Component({
@@ -355,7 +355,7 @@ export class SuperAdminTenantsComponent implements OnInit {
   formSuccess = signal('');
 
   constructor(
-    private readonly auth: SuperAdminAuthService,
+    private readonly auth: AuthService,
     private readonly tenantService: SuperAdminTenantService,
   ) {}
 

@@ -215,6 +215,9 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
           <span><lucide-icon name="layers" [size]="12"></lucide-icon>{{ selectedFicha()?.area }}</span>
           <span><lucide-icon name="calendar" [size]="12"></lucide-icon>{{ horarios().length }} horario(s)</span>
           <span><lucide-icon name="book-open" [size]="12"></lucide-icon>{{ competencias().length }} competencia(s)</span>
+          @if (selectedFicha()?.lider) {
+            <span><lucide-icon name="user-check" [size]="12"></lucide-icon>Líder: {{ selectedFicha()?.lider }}</span>
+          }
           @if (fichaHorasRequeridas() > 0) {
             <span><lucide-icon name="clock" [size]="12"></lucide-icon>{{ fmtH(totalHorasFicha()) }} / {{ fmtH(fichaHorasRequeridas()) }} requeridas</span>
             @if (fichaDeficit() > 0) {
@@ -830,33 +833,39 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
       <div style="display:flex; flex-direction:column; gap:14px">
         <div class="form-group">
           <label class="form-label">Código de la ficha *</label>
-          <input class="form-control" [(ngModel)]="nfCodigo" placeholder="Ej: 3063316" />
+          <input class="form-control" [ngModel]="nfCodigo()" (ngModelChange)="nfCodigo.set($event)" placeholder="Ej: 3063316" />
         </div>
 
         <div class="form-group">
           <label class="form-label">Programa *</label>
-          <input class="form-control" [(ngModel)]="nfPrograma" placeholder="Ej: Tecnólogo en ADSO" />
+          <input class="form-control" [ngModel]="nfPrograma()" (ngModelChange)="nfPrograma.set($event)" placeholder="Ej: Tecnólogo en ADSO" />
         </div>
 
         <div class="form-group">
           <label class="form-label">Área de formación *</label>
-          <input class="form-control" [(ngModel)]="nfArea" placeholder="Ej: TIC" />
+          <input class="form-control" [ngModel]="nfArea()" (ngModelChange)="nfArea.set($event)" placeholder="Ej: TIC" />
         </div>
 
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label">Fecha de inicio</label>
-            <input type="date" class="form-control" [(ngModel)]="nfFechaInicio" />
+            <input type="date" class="form-control" [ngModel]="nfFechaInicio()" (ngModelChange)="nfFechaInicio.set($event)" />
           </div>
           <div class="form-group">
             <label class="form-label">Fecha de fin</label>
-            <input type="date" class="form-control" [(ngModel)]="nfFechaFin" />
+            <input type="date" class="form-control" [ngModel]="nfFechaFin()" (ngModelChange)="nfFechaFin.set($event)" />
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label">Intensidad horaria total (horas)</label>
-          <input type="number" class="form-control" [(ngModel)]="nfIntensidad" placeholder="Ej: 960" />
+          <input type="number" class="form-control" [ngModel]="nfIntensidad()" (ngModelChange)="nfIntensidad.set($event ? +$event : null)" placeholder="Ej: 960" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Instructor líder de la ficha</label>
+          <app-ss [options]="instructorOpts()" placeholder="Seleccionar instructor líder..."
+                  [ngModel]="nfLider()" (ngModelChange)="nfLider.set($event)"></app-ss>
         </div>
       </div>
 
@@ -1189,6 +1198,7 @@ export class ProgramadorFichasComponent implements OnInit {
   mHorasRequeridas = signal<number | null>(null);
 
   // ── Modal nueva ficha ───────────────────────────────────────────
+  instructores   = signal<any[]>([]);
   fichaModalOpen = signal(false);
   nfCodigo       = signal('');
   nfPrograma     = signal('');
@@ -1196,6 +1206,7 @@ export class ProgramadorFichasComponent implements OnInit {
   nfFechaInicio  = signal('');
   nfFechaFin     = signal('');
   nfIntensidad   = signal<number | null>(null);
+  nfLider        = signal<string>('');
   nfSaving       = signal(false);
 
   // ── Computed: opciones filtros ────────────────────────────────
@@ -1218,6 +1229,14 @@ export class ProgramadorFichasComponent implements OnInit {
       .filter(f => (!area || f.area === area) && (!prog || f.programa === prog))
       .map(f => ({ value: f.id, label: `${f.codigo} — ${f.programa}` }));
   });
+
+  instructorOpts = computed((): SSOption[] => [
+    { value: '', label: 'Sin instructor líder' },
+    ...this.instructores().map(i => ({
+      value: i.id,
+      label: `${i.nombre} ${i.apellido ?? ''}`.trim(),
+    })),
+  ]);
 
   selectedFicha = computed(() => this.fichas().find(f => f.id === this.selectedFichaId()) ?? null);
 
@@ -1377,9 +1396,16 @@ export class ProgramadorFichasComponent implements OnInit {
 
   // ── Lifecycle ─────────────────────────────────────────────────
   ngOnInit() {
-    this.api.getFichas().subscribe({
-      next: d => { this.fichas.set(d); this.cdr.markForCheck(); this.cdr.detectChanges(); },
-      error: () => this.toast.error('Error cargando fichas'),
+    forkJoin({
+      fichas: this.api.getHFichas(),
+      instructores: this.api.getHInstructores(),
+    }).subscribe({
+      next: ({ fichas, instructores }) => {
+        this.fichas.set(fichas as any[]);
+        this.instructores.set(instructores as any[]);
+        this.cdr.markForCheck(); this.cdr.detectChanges();
+      },
+      error: () => this.toast.error('Error cargando datos iniciales'),
     });
   }
 
@@ -1636,6 +1662,7 @@ export class ProgramadorFichasComponent implements OnInit {
     this.nfFechaInicio.set('');
     this.nfFechaFin.set('');
     this.nfIntensidad.set(null);
+    this.nfLider.set('');
     this.nfSaving.set(false);
     this.fichaModalOpen.set(true);
     this.cdr.markForCheck(); this.cdr.detectChanges();
@@ -1652,6 +1679,10 @@ export class ProgramadorFichasComponent implements OnInit {
     if (!codigo || !programa || !area) {
       this.toast.error('Completa código, programa y área'); return;
     }
+    const liderId = this.nfLider();
+    const lider = liderId
+      ? this.instructores().find(i => i.id === liderId)
+      : null;
     const dto: any = {
       codigo,
       programa,
@@ -1659,9 +1690,10 @@ export class ProgramadorFichasComponent implements OnInit {
       fechaInicio: this.nfFechaInicio() || null,
       fechaFin: this.nfFechaFin() || null,
       intensidadHoraria: this.nfIntensidad() ?? null,
+      lider: lider ? { nombre: lider.nombre, apellido: lider.apellido ?? '' } : '',
     };
     this.nfSaving.set(true);
-    this.api.createFicha(dto).subscribe({
+    this.api.createHFicha(dto).subscribe({
       next: () => {
         this.toast.success('Ficha creada', `${codigo} fue registrada correctamente.`);
         this.closeFichaModal();
@@ -1677,7 +1709,7 @@ export class ProgramadorFichasComponent implements OnInit {
   }
 
   reloadFichas() {
-    this.api.getFichas().subscribe({
+    this.api.getHFichas().subscribe({
       next: d => {
         this.fichas.set(d);
         this.cdr.markForCheck(); this.cdr.detectChanges();

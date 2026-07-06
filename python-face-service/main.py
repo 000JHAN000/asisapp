@@ -1,5 +1,5 @@
 """
-Microservicio de Reconocimiento Facial Ultra-Seguro para ChronoGest
+Microservicio de Reconocimiento Facial  
 FastAPI + DeepFace (ArcFace + RetinaFace)
 
 Endpoints:

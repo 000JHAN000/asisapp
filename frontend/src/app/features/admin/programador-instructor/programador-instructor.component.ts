@@ -500,8 +500,8 @@ export class ProgramadorInstructorComponent implements OnInit {
   loadAll() {
     this.api.getInstructores().subscribe(i => this.instructores.set(i ?? []));
     this.api.getHorarios().subscribe(h => this.horarios.set(h ?? []));
-    this.api.getFichas().subscribe(f => this.fichas.set(f ?? []));
-    this.api.getAmbientes().subscribe(a => this.ambientes.set(a ?? []));
+    this.api.getHFichas().subscribe(f => this.fichas.set(f ?? []));
+    this.api.getHAmbientes().subscribe(a => this.ambientes.set(a ?? []));
   }
 
   getHorasSemanales(instructorId: number): number {

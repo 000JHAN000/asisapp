@@ -3,7 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { HorarioOrmEntity } from '../../../../horario/infrastructure/entities/horario.orm-entity';
+import { InstructorOrmEntity } from '../../../../persona/infrastructure/entities/instructor.orm-entity';
 
 export type EstadoSesion = 'activa' | 'cerrada' | 'cancelada';
 
@@ -12,8 +16,12 @@ export class AsistenciaSesionTenantEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'uuid' })
   horarioId: string;
+
+  @ManyToOne(() => HorarioOrmEntity)
+  @JoinColumn({ name: 'horarioId' })
+  horario: HorarioOrmEntity;
 
   @Column({ type: 'date' })
   fecha: string;
@@ -27,11 +35,12 @@ export class AsistenciaSesionTenantEntity {
   @Column({ type: 'enum', enum: ['activa', 'cerrada', 'cancelada'], default: 'activa' })
   estado: EstadoSesion;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'uuid' })
   instructorId: string;
 
-  @Column('uuid', { nullable: true })
-  formacionAsistenciaId: string;
+  @ManyToOne(() => InstructorOrmEntity)
+  @JoinColumn({ name: 'instructorId' })
+  instructor: InstructorOrmEntity;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -5,7 +5,7 @@ export interface User {
   apellido: string;
   correo: string;
   fotoPerfil?: string;
-  rol: 'admin' | 'instructor' | 'aprendiz';
+  rol: 'admin' | 'instructor' | 'aprendiz' | 'super_admin';
   esLider?: boolean;
   areaLiderada?: string;
   esTransversal?: boolean;

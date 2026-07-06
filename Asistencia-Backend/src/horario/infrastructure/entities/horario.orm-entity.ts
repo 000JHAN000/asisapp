@@ -36,7 +36,7 @@ export class HorarioOrmEntity {
   @Column({ type: 'time' })
   hora_fin: string;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: 'boolean', default: false })
   activo: boolean;
 
   @Column({ type: 'enum', enum: ['programado','activo','finalizado','cancelado'], default: 'programado' })

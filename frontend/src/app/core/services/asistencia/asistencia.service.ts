@@ -28,11 +28,12 @@ export class AsistenciaService {
   }
 
   // Historial / Consultas
-  getHistorial(fecha?: string, fichaId?: number) {
+  getHistorial(fecha?: string, fichaId?: string, instructorId?: string) {
     let url = `${BASE}/historial`;
     const params: string[] = [];
     if (fecha) params.push(`fecha=${fecha}`);
     if (fichaId) params.push(`fichaId=${fichaId}`);
+    if (instructorId) params.push(`instructorId=${instructorId}`);
     if (params.length) url += '?' + params.join('&');
     return this.http.get(url);
   }
@@ -43,5 +44,9 @@ export class AsistenciaService {
 
   getSesionActivaByFicha(fichaId: string | number) {
     return this.http.get(`${BASE}/ficha/${fichaId}/activa`);
+  }
+
+  getReporteMensual(fichaId: string | number, anio: number, mes: number) {
+    return this.http.get(`${BASE}/ficha/${fichaId}/reporte-mensual?anio=${anio}&mes=${mes}`);
   }
 }

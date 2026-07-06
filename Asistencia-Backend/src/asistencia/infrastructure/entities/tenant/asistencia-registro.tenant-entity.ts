@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { PersonaOrmEntity } from '../../../../persona/infrastructure/entities/persona.orm-entity';
 
 export type EstadoRegistro = 'presente' | 'falla_justificada';
 
@@ -15,13 +18,17 @@ export class AsistenciaRegistroTenantEntity {
   @Column({ type: 'uuid', nullable: true })
   sesionId: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'uuid' })
   aprendizId: string;
+
+  @ManyToOne(() => PersonaOrmEntity)
+  @JoinColumn({ name: 'aprendizId' })
+  aprendiz: PersonaOrmEntity;
 
   @Column({ type: 'enum', enum: ['presente', 'falla_justificada'], default: 'presente' })
   estado: EstadoRegistro;
 
-  @CreateDateColumn()
+  @Column({ type: 'timestamp' })
   horaRegistro: Date;
 
   @Column({ type: 'text', nullable: true })
@@ -44,7 +51,4 @@ export class AsistenciaRegistroTenantEntity {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   soporteUrl?: string;
-
-  @Column('uuid', { nullable: true })
-  asistenciaId: string | null;
 }

@@ -176,16 +176,11 @@ export const routes: Routes = [
       import('./features/auth/login.component').then((m) => m.LoginComponent),
   },
 
-  // ── Super Admin ──────────────────────────────────────────────────────────
+  // ── Super Admin ── se autentica desde /login como cualquier otro rol ──────
   {
     path: 'super-admin',
     children: [
       { path: '', redirectTo: 'tenants', pathMatch: 'full' },
-      {
-        path: 'login',
-        loadComponent: () =>
-          import('./features/super-admin/login/super-admin-login.component').then((m) => m.SuperAdminLoginComponent),
-      },
       {
         path: 'tenants',
         canActivate: [superAdminGuard],

@@ -10,15 +10,8 @@ import { EventoOrmEntity } from '../../../../aplicativo/infrastructure/entities/
 import { NotificacionOrmEntity } from '../../../../aplicativo/infrastructure/entities/notificacion.orm-entity';
 import { SolicitudCambioOrmEntity } from '../../../../aplicativo/infrastructure/entities/solicitud-cambio.orm-entity';
 import { AreaOrmEntity } from '../../../../area/infrastructure/entities/area.orm-entity';
-import { AsistenciaRegistroOrmEntity } from '../../../../asistencia/infrastructure/entities/asistencia-registro.orm-entity';
-import { AsistenciaSesionOrmEntity } from '../../../../asistencia/infrastructure/entities/asistencia-sesion.orm-entity';
-import { AsistenciaOrmEntity } from '../../../../asistencia/infrastructure/entities/asistencia.orm-entity';
-import { ConfiguracionAsistenciaOrmEntity } from '../../../../asistencia/infrastructure/entities/configuracion-asistencia.orm-entity';
-import { FormacionAsistenciaOrmEntity } from '../../../../asistencia/infrastructure/entities/formacion-asistencia.orm-entity';
 import { AsistenciaRegistroTenantEntity } from '../../../../asistencia/infrastructure/entities/tenant/asistencia-registro.tenant-entity';
 import { AsistenciaSesionTenantEntity } from '../../../../asistencia/infrastructure/entities/tenant/asistencia-sesion.tenant-entity';
-import { AsistenciaTenantEntity } from '../../../../asistencia/infrastructure/entities/tenant/asistencia.tenant-entity';
-import { FormacionAsistenciaTenantEntity } from '../../../../asistencia/infrastructure/entities/tenant/formacion-asistencia.tenant-entity';
 import { CentroFormacionOrmEntity } from '../../../../centro-formacion/infrastructure/entities/centro-formacion.orm-entity';
 import { CredencialOrmEntity } from '../../../../credencial/infrastructure/entities/credencial.orm-entity';
 import { CursoOrmEntity } from '../../../../curso/infrastructure/entities/curso.orm-entity';
@@ -59,15 +52,8 @@ export const TENANT_BUSINESS_ENTITIES = [
   NotificacionOrmEntity,
   SolicitudCambioOrmEntity,
   AreaOrmEntity,
-  AsistenciaRegistroOrmEntity,
-  AsistenciaSesionOrmEntity,
-  AsistenciaOrmEntity,
-  ConfiguracionAsistenciaOrmEntity,
-  FormacionAsistenciaOrmEntity,
   AsistenciaRegistroTenantEntity,
   AsistenciaSesionTenantEntity,
-  AsistenciaTenantEntity,
-  FormacionAsistenciaTenantEntity,
   CentroFormacionOrmEntity,
   CredencialOrmEntity,
   CursoOrmEntity,

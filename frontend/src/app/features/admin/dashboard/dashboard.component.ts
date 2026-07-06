@@ -172,8 +172,8 @@ export class AdminDashboardComponent implements OnInit {
   ngOnInit() {
     forkJoin({
       horarios: this.api.getHorariosStats(),
-      ambientes: this.api.getAmbientes(),
-      fichas: this.api.getFichas(),
+      ambientes: this.api.getHAmbientes(),
+      fichas: this.api.getHFichas(),
       instructores: this.api.getInstructoresStats(),
       solicitudes: this.api.getSolicitudes(),
     }).subscribe({

@@ -649,7 +649,7 @@ export class ProgramadorEventosComponent implements OnInit {
 
   load() {
     this.api.getEventos().subscribe(e => this.eventos.set(e ?? []));
-    this.api.getFichas().subscribe(f => this.fichas.set(f ?? []));
+    this.api.getHFichas().subscribe(f => this.fichas.set(f ?? []));
     this.api.getHorarios().subscribe(h => this.horarios.set(h ?? []));
   }
 

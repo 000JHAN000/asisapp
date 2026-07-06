@@ -5,6 +5,10 @@ import { In, Repository } from 'typeorm';
 import { compare, hash } from 'bcrypt';
 
 import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.orm-entity';
+import { InstructorOrmEntity } from 'src/persona/infrastructure/entities/instructor.orm-entity';
+import { AdministradorOrmEntity } from 'src/persona/infrastructure/entities/administrador.orm-entity';
+import { MatriculaOrmEntity } from 'src/matricula/infrastructure/entities/matricula.orm-entity';
+import { CursoOrmEntity } from 'src/curso/infrastructure/entities/curso.orm-entity';
 import { UsuarioOrmEntity } from 'src/usuario/infrastructure/entities/usuario.orm-entity';
 import { CredencialOrmEntity } from 'src/credencial/infrastructure/entities/credencial.orm-entity';
 import { RolOrmEntity } from 'src/rol/infrastructure/entities/rol.orm-entity';
@@ -79,20 +83,21 @@ export class AuthCGService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    if (rolNombre === 'super_admin') {
-      throw new UnauthorizedException('Los super administradores deben usar el panel de plataforma.');
-    }
+    // El super administrador no pertenece a ninguna sede: no requiere tenant_slug.
+    const esSuperAdmin = rolNombre === 'super_admin';
 
-    if (!usuario.tenant_slug) {
+    if (!esSuperAdmin && !usuario.tenant_slug) {
       throw new UnauthorizedException('No tienes una sede asignada. Contacta al administrador.');
     }
 
-    let tenantNombre: string;
-    try {
-      const tenant = await this.tenantConnectionManager.resolveTenant(usuario.tenant_slug);
-      tenantNombre = tenant.nombre;
-    } catch {
-      throw new UnauthorizedException('La sede asignada al usuario no está registrada.');
+    let tenantNombre: string | null = null;
+    if (!esSuperAdmin) {
+      try {
+        const tenant = await this.tenantConnectionManager.resolveTenant(usuario.tenant_slug!);
+        tenantNombre = tenant.nombre;
+      } catch {
+        throw new UnauthorizedException('La sede asignada al usuario no está registrada.');
+      }
     }
 
     const valid = await compare(password, credencial.password);
@@ -100,18 +105,26 @@ export class AuthCGService {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
-    // TODO: En fases 2-3, perfilId debe apuntar al instructor/aprendiz/admin legacy del tenant.
-    const perfilId: string | null = persona.id_persona;
+    const perfilId: string | null = esSuperAdmin
+      ? persona.id_persona
+      : await this.resolvePerfilId(usuario.tenant_slug!, rolNombre, persona.documento, persona.id_persona);
 
-    const payload = {
+    const fichaId: string | null =
+      !esSuperAdmin && rolNombre === 'aprendiz' ? await this.resolveFichaId(usuario.tenant_slug!, perfilId) : null;
+
+    const payload: Record<string, unknown> = {
       sub: usuario.id_usuario,
       correo: persona.correo,
       documento: persona.documento,
       rol: rolNombre,
       perfilId,
-      tenantSlug: usuario.tenant_slug,
+      tenantSlug: esSuperAdmin ? null : usuario.tenant_slug,
       tenantNombre,
     };
+    // Mantiene compatibilidad con SuperAdminGuard, que exige scope: 'platform' en el token.
+    if (esSuperAdmin) {
+      payload.scope = 'platform';
+    }
 
     const access_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET || 'default-secret',
@@ -128,8 +141,8 @@ export class AuthCGService {
         correo: persona.correo,
         documento: persona.documento,
         rol: rolNombre,
-        fichaId: null,
-        tenantSlug: usuario.tenant_slug,
+        fichaId,
+        tenantSlug: esSuperAdmin ? null : usuario.tenant_slug,
         tenantNombre,
       },
     };
@@ -157,6 +170,7 @@ export class AuthCGService {
       password,
       rol,
       tenantSlug,
+      fichaId,
     } = data;
 
     const documento = docOriginal || numDoc;
@@ -170,8 +184,13 @@ export class AuthCGService {
       throw new BadRequestException('Rol no válido');
     }
 
-    const exists = await this.findCredencialByIdentifier(correo);
-    if (exists) {
+    const existsByCorreo = await this.findCredencialByIdentifier(correo);
+    if (existsByCorreo) {
+      throw new BadRequestException('Correo o documento ya registrado');
+    }
+
+    const existsByDocumento = await this.personaRepo.findOne({ where: { documento } });
+    if (existsByDocumento) {
       throw new BadRequestException('Correo o documento ya registrado');
     }
 
@@ -210,7 +229,15 @@ export class AuthCGService {
       usuario_fk: usuario.id_usuario,
     });
 
-    // TODO: En fases 2-3, crear el perfil específico (instructor/aprendiz/admin) en la BD del tenant.
+    if (resolvedTenantSlug) {
+      await this.createTenantProfile(resolvedTenantSlug, rol, {
+        nombre,
+        apellido,
+        correo,
+        documento,
+        fichaId: rol === 'aprendiz' ? fichaId : undefined,
+      });
+    }
 
     return {
       success: true,
@@ -222,6 +249,101 @@ export class AuthCGService {
         tenantSlug: usuario.tenant_slug,
       },
     };
+  }
+
+  /** Crea el perfil en la BD del tenant asignado. Para instructores/administradores crea
+   *  la fila correspondiente; para aprendices, si se proporciona fichaId, crea la matrícula
+   *  para que el aprendiz pueda ver la asistencia activa de su ficha al iniciar sesión. */
+  private async createTenantProfile(
+    tenantSlug: string,
+    rol: string,
+    data: { nombre: string; apellido?: string; correo: string; documento: string; fichaId?: string },
+  ): Promise<PersonaOrmEntity> {
+    const personaRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, PersonaOrmEntity);
+
+    // Reutiliza la persona del tenant si ya existe (p. ej. datos legacy), de lo contrario la crea.
+    let persona = await personaRepo.findOne({ where: { documento: data.documento } });
+    if (persona) {
+      persona.nombres = data.nombre;
+      persona.apellidos = data.apellido ?? null;
+      persona.correo = data.correo;
+      persona.estado = 'activo' as any;
+      persona = await personaRepo.save(persona);
+    } else {
+      persona = await personaRepo.save({
+        documento: data.documento,
+        nombres: data.nombre,
+        apellidos: data.apellido ?? null,
+        correo: data.correo,
+        estado: 'activo' as any,
+      });
+    }
+
+    if (rol === 'instructor') {
+      const instructorRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, InstructorOrmEntity);
+      await instructorRepo.save({ persona_fk: persona.id_persona });
+    } else if (rol === 'admin') {
+      const adminRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, AdministradorOrmEntity);
+      await adminRepo.save({ persona_fk: persona.id_persona });
+    } else if (rol === 'aprendiz' && data.fichaId) {
+      const cursoRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, CursoOrmEntity);
+      const curso = await cursoRepo.findOne({ where: { id_curso: data.fichaId } });
+      if (!curso) {
+        throw new BadRequestException('La ficha seleccionada no existe en esta sede.');
+      }
+
+      const matriculaRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, MatriculaOrmEntity);
+      await matriculaRepo.save({
+        persona_fk: persona.id_persona,
+        curso_fk: curso.id_curso,
+      });
+    }
+
+    return persona;
+  }
+
+  /** El JWT necesita el id del perfil en la BD del tenant (id_instructor/id_administrador/id_persona),
+   *  que es el id que referencian horario_fk, curso_fk, matricula, etc. — no el id_persona de la BD
+   *  compartida de login. Si no se encuentra (perfil no migrado aún), cae al id de persona compartido. */
+  private async resolvePerfilId(
+    tenantSlug: string,
+    rol: string,
+    documento: string,
+    fallbackPersonaId: string,
+  ): Promise<string> {
+    try {
+      const tenantPersonaRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, PersonaOrmEntity);
+      const tenantPersona = await tenantPersonaRepo.findOne({ where: { documento } });
+      if (!tenantPersona) return fallbackPersonaId;
+
+      if (rol === 'instructor') {
+        const instructorRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, InstructorOrmEntity);
+        const instructor = await instructorRepo.findOne({ where: { persona_fk: tenantPersona.id_persona } });
+        return instructor?.id_instructor ?? fallbackPersonaId;
+      }
+      if (rol === 'admin') {
+        const adminRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, AdministradorOrmEntity);
+        const admin = await adminRepo.findOne({ where: { persona_fk: tenantPersona.id_persona } });
+        return admin?.id_administrador ?? fallbackPersonaId;
+      }
+      // aprendiz u otros roles: el id de persona del tenant es el perfil.
+      return tenantPersona.id_persona;
+    } catch {
+      return fallbackPersonaId;
+    }
+  }
+
+  /** Ficha (curso) en la que está matriculado el aprendiz, según la BD del tenant.
+   *  perfilId ya es el id_persona del tenant (ver resolvePerfilId para rol aprendiz). */
+  private async resolveFichaId(tenantSlug: string, perfilId: string | null): Promise<string | null> {
+    if (!perfilId) return null;
+    try {
+      const matriculaRepo = await this.tenantConnectionManager.getTenantRepository(tenantSlug, MatriculaOrmEntity);
+      const matricula = await matriculaRepo.findOne({ where: { persona_fk: perfilId } });
+      return matricula?.curso_fk ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async verifyPin(pin: string) {
@@ -265,15 +387,21 @@ export class AuthCGService {
       }
     }
 
+    const perfilId = usuario.tenant_slug
+      ? await this.resolvePerfilId(usuario.tenant_slug, rolNombre, persona.documento, persona.id_persona)
+      : persona.id_persona;
+    const fichaId =
+      rolNombre === 'aprendiz' && usuario.tenant_slug ? await this.resolveFichaId(usuario.tenant_slug, perfilId) : null;
+
     return {
       id: usuario.id_usuario,
-      perfilId: persona.id_persona,
+      perfilId,
       nombre: persona.nombres,
       apellido: persona.apellidos,
       correo: persona.correo,
       documento: persona.documento,
       rol: rolNombre,
-      fichaId: null,
+      fichaId,
       tenantSlug: usuario.tenant_slug,
       tenantNombre,
     };

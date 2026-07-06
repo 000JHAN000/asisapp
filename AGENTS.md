@@ -46,11 +46,23 @@ El frontend envía el header `x-tenant-id` en cada petición autenticada con el 
 El flujo de autenticación es:
 
 1. El usuario ingresa solo correo/documento y contraseña.
-2. El backend busca el usuario en `usuario_maestro`.
+2. El backend busca la credencial en `sena_db` (`credencial` → `usuario` → `persona`).
 3. Si el usuario no tiene `tenant_slug`, rechaza el login con el mensaje:  
    `"No tienes una sede asignada. Contacta al administrador."`
-4. Si tiene sede, valida que exista en el catálogo y devuelve `tenantSlug` + `tenantNombre` en la respuesta.
+4. Si tiene sede, valida que exista en el catálogo, resuelve el `perfilId` y (para aprendices) la ficha actual según la BD del tenant, y devuelve `tenantSlug` + `tenantNombre` en la respuesta.
 5. El frontend guarda la sede en `localStorage` (`cg_tenant`) y la muestra en el layout.
+
+### Registro de usuarios de sede
+
+- `POST /api/auth/register` (público, previo PIN) y `POST /api/auth/register-admin` (solo admins) crean la persona, usuario y credencial en `sena_db`, y el perfil correspondiente en la BD del tenant.
+- Para el rol **aprendiz**, si el frontend envía `fichaId`, el backend también crea la **matrícula** en el tenant. Esto permite que, al iniciar sesión, el aprendiz reciba su `fichaId` y pueda ver las sesiones de asistencia activas de su ficha.
+- El registro valida que no exista ya una persona con el mismo correo o documento.
+
+### Fichas e instructor líder
+
+- El Programador de Fichas (`/app/admin/programador-fichas`) usa el modal **Nueva Ficha** para crear un `Curso` en el tenant.
+- El modal permite seleccionar un **instructor líder** de la lista de instructores de la sede; el backend guarda el nombre completo en el campo `lider` de `curso_orm_entity`.
+- `GET /api/horarios-admin/fichas` devuelve cada ficha incluyendo su `lider`.
 
 ### Endpoint público de sedes
 

@@ -2,7 +2,14 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { SuperAdminJwtPayload } from '../services/super-admin-auth.service';
+
+export interface SuperAdminJwtPayload {
+  sub: string;
+  correo: string;
+  documento: string;
+  rol: 'super_admin';
+  scope: 'platform';
+}
 
 @Injectable()
 export class SuperAdminJwtStrategy extends PassportStrategy(Strategy, 'super-admin-jwt') {

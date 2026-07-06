@@ -1598,8 +1598,8 @@ export class InstructorMisHorariosComponent implements OnInit, OnDestroy {
     this.manualOverrides.clear();
     this.api.getEventos().subscribe(e => this.eventos.set(e ?? []));
     this.api.getHorariosByInstructor(id).subscribe(h => {
-      this.api.getFichas().subscribe((fichas: any[]) => {
-        this.api.getAmbientes().subscribe((ambientes: any[]) => {
+      this.api.getHFichas().subscribe((fichas: any[]) => {
+        this.api.getHAmbientes().subscribe((ambientes: any[]) => {
           const byDay: Record<string, any[]> = {};
           this.dias.forEach(d => byDay[d] = []);
           h.forEach((hor: any) => {

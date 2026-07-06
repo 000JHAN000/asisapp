@@ -395,7 +395,7 @@ export class AprendizMisHorariosComponent implements OnInit {
   ngOnInit() {
     const u = this.auth.currentUser();
     if (!u?.fichaId) return;
-    this.api.getFichas().subscribe(fichas => {
+    this.api.getHFichas().subscribe(fichas => {
       const f = fichas.find((x: any) => x.id === u.fichaId);
       if (f) this.ficha.set(f);
     });

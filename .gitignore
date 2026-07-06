@@ -29,3 +29,17 @@ ENV/
 # Misc
 *.local
 .aider*
+
+# Credenciales reales (usar .env.example como plantilla)
+.env
+Asistencia-Backend/.env
+
+# Fotos capturadas por el software (biometria / evidencia de asistencia) - no se versionan
+Asistencia-Backend/uploads/faces/
+Asistencia-Backend/uploads/fotos/
+python-face-service/photos/
+python-face-service/temp/
+python-face-service/test_face2.jpg
+
+# Volcados de base de datos y scripts de trabajo con datos/credenciales reales
+backups/

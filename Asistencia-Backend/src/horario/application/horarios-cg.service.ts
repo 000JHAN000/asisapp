@@ -67,11 +67,22 @@ export class HorariosCGService {
     return item ? this.mapToDto(item) : null;
   }
 
-  async create(data: any) {
+  private async createOne(data: any) {
     const repo = await this.getRepo();
     const entity = repo.create(this.mapDtoToEntity(data));
     const saved = await repo.save(entity);
     return this.mapToDto(saved);
+  }
+
+  async create(data: any) {
+    if (Array.isArray(data)) {
+      const results: any[] = [];
+      for (const item of data) {
+        results.push(await this.createOne(item));
+      }
+      return results;
+    }
+    return this.createOne(data);
   }
 
   async update(id: string, data: any) {
@@ -115,6 +126,15 @@ export class HorariosCGService {
     return this.mapToDto(saved);
   }
 
+  /** Sólo se puede iniciar el día correspondiente. */
+  private estaDentroDelHorario(horario: HorarioOrmEntity): boolean {
+    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const now = new Date();
+    if (horario.diaSemana && horario.diaSemana !== dias[now.getDay()]) return false;
+
+    return true;
+  }
+
   async play(
     id: string,
     payload?: {
@@ -125,6 +145,9 @@ export class HorariosCGService {
     const repo = await this.getRepo();
     const horario = await repo.findOne({ where: { id_horario: id } });
     if (!horario) throw new NotFoundException('Horario no encontrado');
+    if (!this.estaDentroDelHorario(horario)) {
+      throw new BadRequestException('Solo puedes iniciar la clase el día y dentro del horario programado.');
+    }
     horario.activo = true;
     horario.estado = 'activo';
     if (payload?.ambienteId) horario.ambiente_fk = payload.ambienteId;

@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { EntityTarget, FindManyOptions, ObjectLiteral, Repository } from 'typeorm';
 
 import { CentroFormacionOrmEntity } from '../../centro-formacion/infrastructure/entities/centro-formacion.orm-entity';
 import { SedeOrmEntity } from '../../sede/infrastructure/entities/sede.orm-entity';
@@ -20,83 +20,80 @@ import { PermisoOrmEntity } from '../../permiso/infrastructure/entities/permiso.
 import { AccesoOrmEntity } from '../../acceso/infrastructure/entities/acceso.orm-entity';
 import { RolOrmEntity } from '../../rol/infrastructure/entities/rol.orm-entity';
 import { AmbienteOrmEntity } from '../../ambiente/infrastructure/entities/ambiente.orm-entity';
+import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
+import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
 
 @Injectable()
 export class FormativoCGService {
   constructor(
-    @InjectRepository(CentroFormacionOrmEntity)
-    private readonly centroRepo: Repository<CentroFormacionOrmEntity>,
-    @InjectRepository(SedeOrmEntity)
-    private readonly sedeRepo: Repository<SedeOrmEntity>,
+    private readonly connectionManager: TenantConnectionManager,
+    // Departamentos/municipios (catálogo geográfico, usado en el registro público antes de tener
+    // tenant) y usuario/credencial/rol/acceso/aplicativo (entidades de autenticación que ya vive
+    // en la BD compartida — las usan AuthCGService, RbacGuard y UsuariosCGService) se quedan en
+    // la conexión por defecto para no crear una copia paralela desconectada del login real.
     @InjectRepository(DepartamentoOrmEntity)
     private readonly departamentoRepo: Repository<DepartamentoOrmEntity>,
     @InjectRepository(MunicipioOrmEntity)
     private readonly municipioRepo: Repository<MunicipioOrmEntity>,
-    @InjectRepository(AreaOrmEntity)
-    private readonly areaRepo: Repository<AreaOrmEntity>,
-    @InjectRepository(ProgramaOrmEntity)
-    private readonly programaRepo: Repository<ProgramaOrmEntity>,
-    @InjectRepository(PersonaOrmEntity)
-    private readonly personaRepo: Repository<PersonaOrmEntity>,
-    @InjectRepository(CursoOrmEntity)
-    private readonly cursoRepo: Repository<CursoOrmEntity>,
-    @InjectRepository(MatriculaOrmEntity)
-    private readonly matriculaRepo: Repository<MatriculaOrmEntity>,
-    @InjectRepository(AplicativoOrmEntity)
-    private readonly aplicativoRepo: Repository<AplicativoOrmEntity>,
-    @InjectRepository(ModuloOrmEntity)
-    private readonly moduloRepo: Repository<ModuloOrmEntity>,
-    @InjectRepository(ServicioOrmEntity)
-    private readonly servicioRepo: Repository<ServicioOrmEntity>,
     @InjectRepository(UsuarioOrmEntity)
     private readonly usuarioRepo: Repository<UsuarioOrmEntity>,
     @InjectRepository(CredencialOrmEntity)
     private readonly credencialRepo: Repository<CredencialOrmEntity>,
-    @InjectRepository(PermisoOrmEntity)
-    private readonly permisoRepo: Repository<PermisoOrmEntity>,
-    @InjectRepository(AccesoOrmEntity)
-    private readonly accesoRepo: Repository<AccesoOrmEntity>,
     @InjectRepository(RolOrmEntity)
     private readonly rolRepo: Repository<RolOrmEntity>,
-    @InjectRepository(AmbienteOrmEntity)
-    private readonly ambienteRepo: Repository<AmbienteOrmEntity>,
+    @InjectRepository(AccesoOrmEntity)
+    private readonly accesoRepo: Repository<AccesoOrmEntity>,
+    @InjectRepository(AplicativoOrmEntity)
+    private readonly aplicativoRepo: Repository<AplicativoOrmEntity>,
   ) {}
 
+  private get tenantId(): string {
+    const tenantId = getCurrentTenantId();
+    if (!tenantId) {
+      throw new BadRequestException('No se ha resuelto el tenant para la petición');
+    }
+    return tenantId;
+  }
+
+  private async getRepo<T extends ObjectLiteral>(entity: EntityTarget<T>): Promise<Repository<T>> {
+    return this.connectionManager.getTenantRepository(this.tenantId, entity);
+  }
+
   // ─── Centros ───
-  findAllCentros() {
-    return this.centroRepo.find();
+  async findAllCentros() {
+    return (await this.getRepo(CentroFormacionOrmEntity)).find();
   }
-  findOneCentro(id: string) {
-    return this.centroRepo.findOneBy({ id_centro: id });
+  async findOneCentro(id: string) {
+    return (await this.getRepo(CentroFormacionOrmEntity)).findOneBy({ id_centro: id });
   }
-  createCentro(data: Partial<CentroFormacionOrmEntity>) {
-    return this.centroRepo.save(data);
+  async createCentro(data: Partial<CentroFormacionOrmEntity>) {
+    return (await this.getRepo(CentroFormacionOrmEntity)).save(data);
   }
-  updateCentro(id: string, data: Partial<CentroFormacionOrmEntity>) {
-    return this.centroRepo.update({ id_centro: id }, data);
+  async updateCentro(id: string, data: Partial<CentroFormacionOrmEntity>) {
+    return (await this.getRepo(CentroFormacionOrmEntity)).update({ id_centro: id }, data);
   }
-  removeCentro(id: string) {
-    return this.centroRepo.delete({ id_centro: id });
+  async removeCentro(id: string) {
+    return (await this.getRepo(CentroFormacionOrmEntity)).delete({ id_centro: id });
   }
 
   // ─── Sedes ───
-  findAllSedes() {
-    return this.sedeRepo.find();
+  async findAllSedes() {
+    return (await this.getRepo(SedeOrmEntity)).find();
   }
-  findOneSede(id: string) {
-    return this.sedeRepo.findOneBy({ id_sede: id });
+  async findOneSede(id: string) {
+    return (await this.getRepo(SedeOrmEntity)).findOneBy({ id_sede: id });
   }
-  createSede(data: Partial<SedeOrmEntity>) {
-    return this.sedeRepo.save(data);
+  async createSede(data: Partial<SedeOrmEntity>) {
+    return (await this.getRepo(SedeOrmEntity)).save(data);
   }
-  updateSede(id: string, data: Partial<SedeOrmEntity>) {
-    return this.sedeRepo.update({ id_sede: id }, data);
+  async updateSede(id: string, data: Partial<SedeOrmEntity>) {
+    return (await this.getRepo(SedeOrmEntity)).update({ id_sede: id }, data);
   }
-  removeSede(id: string) {
-    return this.sedeRepo.delete({ id_sede: id });
+  async removeSede(id: string) {
+    return (await this.getRepo(SedeOrmEntity)).delete({ id_sede: id });
   }
 
-  // ─── Departamentos ───
+  // ─── Departamentos (catálogo compartido) ───
   findAllDepartamentos() {
     return this.departamentoRepo.find();
   }
@@ -113,7 +110,7 @@ export class FormativoCGService {
     return this.departamentoRepo.delete({ id_departamento: id });
   }
 
-  // ─── Municipios ───
+  // ─── Municipios (catálogo compartido) ───
   findAllMunicipios() {
     return this.municipioRepo.find();
   }
@@ -131,111 +128,111 @@ export class FormativoCGService {
   }
 
   // ─── Ambientes ───
-  getAmbientesFormativo() {
-    return this.ambienteRepo.find();
+  async getAmbientesFormativo() {
+    return (await this.getRepo(AmbienteOrmEntity)).find();
   }
-  findAllAmbientes() {
-    return this.ambienteRepo.find();
+  async findAllAmbientes() {
+    return (await this.getRepo(AmbienteOrmEntity)).find();
   }
-  findOneAmbiente(id: string) {
-    return this.ambienteRepo.findOneBy({ id_ambiente: id });
+  async findOneAmbiente(id: string) {
+    return (await this.getRepo(AmbienteOrmEntity)).findOneBy({ id_ambiente: id });
   }
-  createAmbiente(data: Partial<AmbienteOrmEntity>) {
-    return this.ambienteRepo.save(data);
+  async createAmbiente(data: Partial<AmbienteOrmEntity>) {
+    return (await this.getRepo(AmbienteOrmEntity)).save(data);
   }
-  updateAmbiente(id: string, data: Partial<AmbienteOrmEntity>) {
-    return this.ambienteRepo.update({ id_ambiente: id }, data);
+  async updateAmbiente(id: string, data: Partial<AmbienteOrmEntity>) {
+    return (await this.getRepo(AmbienteOrmEntity)).update({ id_ambiente: id }, data);
   }
-  removeAmbiente(id: string) {
-    return this.ambienteRepo.delete({ id_ambiente: id });
+  async removeAmbiente(id: string) {
+    return (await this.getRepo(AmbienteOrmEntity)).delete({ id_ambiente: id });
   }
 
   // ─── Áreas ───
-  findAllAreas() {
-    return this.areaRepo.find();
+  async findAllAreas() {
+    return (await this.getRepo(AreaOrmEntity)).find();
   }
-  findOneArea(id: string) {
-    return this.areaRepo.findOneBy({ id_area: id });
+  async findOneArea(id: string) {
+    return (await this.getRepo(AreaOrmEntity)).findOneBy({ id_area: id });
   }
-  createArea(data: Partial<AreaOrmEntity>) {
-    return this.areaRepo.save(data);
+  async createArea(data: Partial<AreaOrmEntity>) {
+    return (await this.getRepo(AreaOrmEntity)).save(data);
   }
-  updateArea(id: string, data: Partial<AreaOrmEntity>) {
-    return this.areaRepo.update({ id_area: id }, data);
+  async updateArea(id: string, data: Partial<AreaOrmEntity>) {
+    return (await this.getRepo(AreaOrmEntity)).update({ id_area: id }, data);
   }
-  removeArea(id: string) {
-    return this.areaRepo.delete({ id_area: id });
+  async removeArea(id: string) {
+    return (await this.getRepo(AreaOrmEntity)).delete({ id_area: id });
   }
 
   // ─── Programas ───
-  findAllProgramas() {
-    return this.programaRepo.find();
+  async findAllProgramas() {
+    return (await this.getRepo(ProgramaOrmEntity)).find();
   }
-  findOnePrograma(id: string) {
-    return this.programaRepo.findOneBy({ id_programa: id });
+  async findOnePrograma(id: string) {
+    return (await this.getRepo(ProgramaOrmEntity)).findOneBy({ id_programa: id });
   }
-  createPrograma(data: Partial<ProgramaOrmEntity>) {
-    return this.programaRepo.save(data);
+  async createPrograma(data: Partial<ProgramaOrmEntity>) {
+    return (await this.getRepo(ProgramaOrmEntity)).save(data);
   }
-  updatePrograma(id: string, data: Partial<ProgramaOrmEntity>) {
-    return this.programaRepo.update({ id_programa: id }, data);
+  async updatePrograma(id: string, data: Partial<ProgramaOrmEntity>) {
+    return (await this.getRepo(ProgramaOrmEntity)).update({ id_programa: id }, data);
   }
-  removePrograma(id: string) {
-    return this.programaRepo.delete({ id_programa: id });
+  async removePrograma(id: string) {
+    return (await this.getRepo(ProgramaOrmEntity)).delete({ id_programa: id });
   }
 
   // ─── Personas ───
-  findAllPersonas() {
-    return this.personaRepo.find();
+  async findAllPersonas() {
+    return (await this.getRepo(PersonaOrmEntity)).find();
   }
-  findOnePersona(id: string) {
-    return this.personaRepo.findOneBy({ id_persona: id });
+  async findOnePersona(id: string) {
+    return (await this.getRepo(PersonaOrmEntity)).findOneBy({ id_persona: id });
   }
-  createPersona(data: Partial<PersonaOrmEntity>) {
-    return this.personaRepo.save(data);
+  async createPersona(data: Partial<PersonaOrmEntity>) {
+    return (await this.getRepo(PersonaOrmEntity)).save(data);
   }
-  updatePersona(id: string, data: Partial<PersonaOrmEntity>) {
-    return this.personaRepo.update({ id_persona: id }, data);
+  async updatePersona(id: string, data: Partial<PersonaOrmEntity>) {
+    return (await this.getRepo(PersonaOrmEntity)).update({ id_persona: id }, data);
   }
-  removePersona(id: string) {
-    return this.personaRepo.delete({ id_persona: id });
+  async removePersona(id: string) {
+    return (await this.getRepo(PersonaOrmEntity)).delete({ id_persona: id });
   }
 
   // ─── Cursos ───
-  findAllCursos() {
-    return this.cursoRepo.find();
+  async findAllCursos() {
+    return (await this.getRepo(CursoOrmEntity)).find();
   }
-  findOneCurso(id: string) {
-    return this.cursoRepo.findOneBy({ id_curso: id });
+  async findOneCurso(id: string) {
+    return (await this.getRepo(CursoOrmEntity)).findOneBy({ id_curso: id });
   }
-  createCurso(data: Partial<CursoOrmEntity>) {
-    return this.cursoRepo.save(data);
+  async createCurso(data: Partial<CursoOrmEntity>) {
+    return (await this.getRepo(CursoOrmEntity)).save(data);
   }
-  updateCurso(id: string, data: Partial<CursoOrmEntity>) {
-    return this.cursoRepo.update({ id_curso: id }, data);
+  async updateCurso(id: string, data: Partial<CursoOrmEntity>) {
+    return (await this.getRepo(CursoOrmEntity)).update({ id_curso: id }, data);
   }
-  removeCurso(id: string) {
-    return this.cursoRepo.delete({ id_curso: id });
+  async removeCurso(id: string) {
+    return (await this.getRepo(CursoOrmEntity)).delete({ id_curso: id });
   }
 
   // ─── Matrículas ───
-  findAllMatriculas() {
-    return this.matriculaRepo.find();
+  async findAllMatriculas() {
+    return (await this.getRepo(MatriculaOrmEntity)).find();
   }
-  findOneMatricula(id: string) {
-    return this.matriculaRepo.findOneBy({ id_matricula: id });
+  async findOneMatricula(id: string) {
+    return (await this.getRepo(MatriculaOrmEntity)).findOneBy({ id_matricula: id });
   }
-  createMatricula(data: Partial<MatriculaOrmEntity>) {
-    return this.matriculaRepo.save(data);
+  async createMatricula(data: Partial<MatriculaOrmEntity>) {
+    return (await this.getRepo(MatriculaOrmEntity)).save(data);
   }
-  updateMatricula(id: string, data: Partial<MatriculaOrmEntity>) {
-    return this.matriculaRepo.update({ id_matricula: id }, data);
+  async updateMatricula(id: string, data: Partial<MatriculaOrmEntity>) {
+    return (await this.getRepo(MatriculaOrmEntity)).update({ id_matricula: id }, data);
   }
-  removeMatricula(id: string) {
-    return this.matriculaRepo.delete({ id_matricula: id });
+  async removeMatricula(id: string) {
+    return (await this.getRepo(MatriculaOrmEntity)).delete({ id_matricula: id });
   }
 
-  // ─── Aplicativos ───
+  // ─── Aplicativos (compartido, referenciado por auth) ───
   findAllAplicativos() {
     return this.aplicativoRepo.find();
   }
@@ -252,7 +249,7 @@ export class FormativoCGService {
     return this.aplicativoRepo.delete({ id_aplicativo: id });
   }
 
-  // ─── Roles ───
+  // ─── Roles (compartido, catálogo fijo usado por RbacGuard) ───
   findAllRoles() {
     return this.rolRepo.find();
   }
@@ -270,40 +267,40 @@ export class FormativoCGService {
   }
 
   // ─── Módulos ───
-  findAllModulos() {
-    return this.moduloRepo.find();
+  async findAllModulos() {
+    return (await this.getRepo(ModuloOrmEntity)).find();
   }
-  findOneModulo(id: string) {
-    return this.moduloRepo.findOneBy({ id_modulo: id });
+  async findOneModulo(id: string) {
+    return (await this.getRepo(ModuloOrmEntity)).findOneBy({ id_modulo: id });
   }
-  createModulo(data: Partial<ModuloOrmEntity>) {
-    return this.moduloRepo.save(data);
+  async createModulo(data: Partial<ModuloOrmEntity>) {
+    return (await this.getRepo(ModuloOrmEntity)).save(data);
   }
-  updateModulo(id: string, data: Partial<ModuloOrmEntity>) {
-    return this.moduloRepo.update({ id_modulo: id }, data);
+  async updateModulo(id: string, data: Partial<ModuloOrmEntity>) {
+    return (await this.getRepo(ModuloOrmEntity)).update({ id_modulo: id }, data);
   }
-  removeModulo(id: string) {
-    return this.moduloRepo.delete({ id_modulo: id });
+  async removeModulo(id: string) {
+    return (await this.getRepo(ModuloOrmEntity)).delete({ id_modulo: id });
   }
 
   // ─── Servicios ───
-  findAllServicios() {
-    return this.servicioRepo.find();
+  async findAllServicios() {
+    return (await this.getRepo(ServicioOrmEntity)).find();
   }
-  findOneServicio(id: string) {
-    return this.servicioRepo.findOneBy({ id_servicio: id });
+  async findOneServicio(id: string) {
+    return (await this.getRepo(ServicioOrmEntity)).findOneBy({ id_servicio: id });
   }
-  createServicio(data: Partial<ServicioOrmEntity>) {
-    return this.servicioRepo.save(data);
+  async createServicio(data: Partial<ServicioOrmEntity>) {
+    return (await this.getRepo(ServicioOrmEntity)).save(data);
   }
-  updateServicio(id: string, data: Partial<ServicioOrmEntity>) {
-    return this.servicioRepo.update({ id_servicio: id }, data);
+  async updateServicio(id: string, data: Partial<ServicioOrmEntity>) {
+    return (await this.getRepo(ServicioOrmEntity)).update({ id_servicio: id }, data);
   }
-  removeServicio(id: string) {
-    return this.servicioRepo.delete({ id_servicio: id });
+  async removeServicio(id: string) {
+    return (await this.getRepo(ServicioOrmEntity)).delete({ id_servicio: id });
   }
 
-  // ─── Usuarios ───
+  // ─── Usuarios (compartido, son las cuentas de login reales) ───
   findAllUsuarios() {
     return this.usuarioRepo.find();
   }
@@ -320,7 +317,7 @@ export class FormativoCGService {
     return this.usuarioRepo.delete({ id_usuario: id });
   }
 
-  // ─── Credenciales ───
+  // ─── Credenciales (compartido, contraseñas/rol de login) ───
   findAllCredenciales() {
     return this.credencialRepo.find();
   }
@@ -338,23 +335,23 @@ export class FormativoCGService {
   }
 
   // ─── Permisos ───
-  findAllPermisos() {
-    return this.permisoRepo.find();
+  async findAllPermisos() {
+    return (await this.getRepo(PermisoOrmEntity)).find();
   }
-  findOnePermiso(id: string) {
-    return this.permisoRepo.findOneBy({ id_permiso: id });
+  async findOnePermiso(id: string) {
+    return (await this.getRepo(PermisoOrmEntity)).findOneBy({ id_permiso: id });
   }
-  createPermiso(data: Partial<PermisoOrmEntity>) {
-    return this.permisoRepo.save(data);
+  async createPermiso(data: Partial<PermisoOrmEntity>) {
+    return (await this.getRepo(PermisoOrmEntity)).save(data);
   }
-  updatePermiso(id: string, data: Partial<PermisoOrmEntity>) {
-    return this.permisoRepo.update({ id_permiso: id }, data);
+  async updatePermiso(id: string, data: Partial<PermisoOrmEntity>) {
+    return (await this.getRepo(PermisoOrmEntity)).update({ id_permiso: id }, data);
   }
-  removePermiso(id: string) {
-    return this.permisoRepo.delete({ id_permiso: id });
+  async removePermiso(id: string) {
+    return (await this.getRepo(PermisoOrmEntity)).delete({ id_permiso: id });
   }
 
-  // ─── Accesos ───
+  // ─── Accesos (compartido, log de acceso ligado a usuario/credencial) ───
   findAllAccesos() {
     return this.accesoRepo.find();
   }
@@ -370,7 +367,7 @@ export class FormativoCGService {
   removeAcceso(id: string) {
     return this.accesoRepo.delete({ id_acceso: id });
   }
-  async getAccesos(limit?: number) {
+  getAccesos(limit?: number) {
     const options: FindManyOptions<AccesoOrmEntity> = {
       order: { fecha_ingreso: 'DESC' },
     };

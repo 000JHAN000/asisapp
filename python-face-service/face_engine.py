@@ -1,5 +1,5 @@
 """
-Motor de reconocimiento facial ultra-seguro.
+
 Usa DeepFace con ArcFace + RetinaFace.
 """
 

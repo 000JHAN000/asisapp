@@ -3,7 +3,6 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { hash } from 'bcrypt';
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
-import { TenantMigrationRunner } from 'src/auth/infrastructure/persistence/tenants/tenant-migration.runner';
 import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
 import { UsuarioOrmEntity } from '../../usuario/infrastructure/entities/usuario.orm-entity';
 import { CredencialOrmEntity } from '../../credencial/infrastructure/entities/credencial.orm-entity';
@@ -30,7 +29,6 @@ export class TenantProvisioningService {
     @InjectDataSource()
     private readonly masterDataSource: DataSource,
     private readonly connectionManager: TenantConnectionManager,
-    private readonly migrationRunner: TenantMigrationRunner,
     @InjectRepository(PersonaOrmEntity)
     private readonly personaRepo: Repository<PersonaOrmEntity>,
     @InjectRepository(UsuarioOrmEntity)
@@ -78,11 +76,10 @@ export class TenantProvisioningService {
     const tenantId = tenantRows[0].id;
 
     try {
-      // Resolver tenant recién creado
-      const tenant = await this.connectionManager.resolveTenant(slug);
-
-      // Ejecutar migraciones de esquema de negocio
-      await this.migrationRunner.runMigrations(tenant);
+      // Conectar y sincronizar el esquema de negocio (misma vía que usan las sedes existentes:
+      // TENANT_BUSINESS_ENTITIES + synchronize, no migraciones — esas quedaron obsoletas y creaban
+      // el esquema cg_* anterior a la migración a legacy conectado).
+      await this.connectionManager.getTenantDataSource(slug);
 
       // Crear administrador inicial si se proporcionaron datos
       await this.createInitialAdmin(slug, input);

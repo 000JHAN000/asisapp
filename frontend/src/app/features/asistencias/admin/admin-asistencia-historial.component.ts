@@ -2,6 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AsistenciaService } from '../../../core/services/asistencia/asistencia.service';
 import { ApiService } from '../../../core/services/api.service';
+import { ToastService } from '../../../core/services/toast.service';
 import { LucideAngularModule } from 'lucide-angular';
 import { DatePipe } from '@angular/common';
 
@@ -12,7 +13,7 @@ import { DatePipe } from '@angular/common';
     <div class="page-header">
       <div>
         <h2>Historial de Asistencias</h2>
-        <p class="text-muted text-sm">Consulta y revisa todas las sesiones de asistencia registradas</p>
+        <p class="text-muted text-sm">Consulta y revisa todas las sesiones de asistencia registradas por instructor</p>
       </div>
     </div>
 
@@ -27,6 +28,15 @@ import { DatePipe } from '@angular/common';
           <option value="">Todas</option>
           @for (f of fichas(); track f.id) {
             <option [value]="f.id">{{ f.codigo }} — {{ f.programa }}</option>
+          }
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Instructor</label>
+        <select class="form-control" [(ngModel)]="filtro.instructorId" (change)="cargarHistorial()">
+          <option value="">Todos</option>
+          @for (i of instructores(); track i.id) {
+            <option [value]="i.id">{{ i.apellido }}, {{ i.nombre }}</option>
           }
         </select>
       </div>
@@ -53,7 +63,7 @@ import { DatePipe } from '@angular/common';
             <tr>
               <td>{{ s.fecha }}</td>
               <td>{{ s.ficha?.codigo }} — {{ s.ficha?.programa }}</td>
-              <td>{{ s.instructor?.nombre }} {{ s.instructor?.apellido }}</td>
+              <td>{{ s.instructor?.apellido }}, {{ s.instructor?.nombre }}</td>
               <td>{{ s.ambiente?.nombre ?? '—' }}</td>
               <td>{{ s.horaInicio }} — {{ s.horaFin }}</td>
               <td>
@@ -62,7 +72,7 @@ import { DatePipe } from '@angular/common';
                 </span>
               </td>
               <td>
-                <button class="btn-icon-sm" (click)="verDetalle(s)">
+                <button class="btn-icon-sm" title="Ver detalle" (click)="verDetalle(s)">
                   <lucide-icon name="eye" [size]="14"></lucide-icon>
                 </button>
               </td>
@@ -82,7 +92,7 @@ import { DatePipe } from '@angular/common';
           <div class="modal-header">
             <div>
               <h3>Detalle de Asistencia</h3>
-              <p class="text-muted text-sm">{{ detalle()?.ficha?.codigo }} — {{ detalle()?.fecha }}</p>
+              <p class="text-muted text-sm">{{ detalle()?.ficha?.codigo }} — {{ detalle()?.fecha }} · Instructor: {{ detalle()?.instructor?.apellido }}, {{ detalle()?.instructor?.nombre }}</p>
             </div>
             <button class="btn-icon" (click)="detalle.set(null)"><lucide-icon name="x" [size]="18"></lucide-icon></button>
           </div>
@@ -98,31 +108,46 @@ import { DatePipe } from '@angular/common';
                   <th>IP</th>
                   <th>Estado</th>
                   <th>Firma</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                @for (r of detalle()?.registros ?? []; track r.id; let i = $index) {
+                @for (r of filasDetalle(); track r.aprendizId; let i = $index) {
                   <tr>
                     <td>{{ i+1 }}</td>
-                    <td>{{ r.aprendiz?.apellido }}, {{ r.aprendiz?.nombre }}</td>
-                    <td>{{ r.aprendiz?.numDoc }}</td>
-                    <td>{{ r.horaRegistro | date:'HH:mm' }}</td>
+                    <td>{{ r.apellido }}, {{ r.nombre }}</td>
+                    <td>{{ r.documento }}</td>
+                    <td>{{ r.horaRegistro ? (r.horaRegistro | date:'HH:mm') : '—' }}</td>
                     <td>
                       @if (r.ipAddress) {
                         <span class="ip-badge" title="IP desde donde se registró">{{ r.ipAddress }}</span>
                       } @else { — }
                     </td>
                     <td>
-                      <span class="badge" [class.presente]="r.estado==='presente'" [class.falla]="r.estado==='falla_justificada'">
-                        {{ r.estado==='presente' ? 'Presente' : 'Falla Just.' }}
-                      </span>
+                      @if (r.estado === 'presente') {
+                        <span class="badge presente">Presente</span>
+                      } @else if (r.estado === 'falla_justificada') {
+                        <span class="badge falla">Falla Just.</span>
+                      } @else {
+                        <span class="badge ausente">Ausente</span>
+                      }
                     </td>
                     <td>
                       @if (r.firmaImagen) {
                         <img [src]="r.firmaImagen" class="firma-thumb" (click)="verFirma(r.firmaImagen)">
                       } @else { — }
                     </td>
+                    <td>
+                      @if (r.estado !== 'falla_justificada') {
+                        <button class="btn-icon-sm" title="Marcar falla justificada" (click)="marcarFalla(r.aprendizId)">
+                          <lucide-icon name="file-check" [size]="14"></lucide-icon>
+                        </button>
+                      }
+                    </td>
                   </tr>
+                }
+                @if (filasDetalle().length === 0) {
+                  <tr><td colspan="8" class="empty-cell">No hay aprendices matriculados en esta ficha</td></tr>
                 }
               </tbody>
             </table>
@@ -163,7 +188,9 @@ import { DatePipe } from '@angular/common';
     .empty-cell { text-align: center; color: var(--text-muted); padding: 24px; }
     .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
     .badge.presentes { background: #dcfce7; color: #166534; }
-    .badge.falla { background: #fee2e2; color: #991b1b; }
+    .badge.presente { background: #dcfce7; color: #166534; }
+    .badge.falla { background: #fef3c7; color: #92400e; }
+    .badge.ausente { background: #fee2e2; color: #991b1b; }
     .ip-badge { font-size: 11px; font-family: monospace; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; cursor: default; }
     .firma-thumb { width: 60px; height: 30px; object-fit: contain; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; background: #fff; }
     .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
@@ -181,35 +208,81 @@ import { DatePipe } from '@angular/common';
 export class AdminAsistenciaHistorialComponent implements OnInit {
   sesiones = signal<any[]>([]);
   fichas = signal<any[]>([]);
+  instructores = signal<any[]>([]);
   detalle = signal<any>(null);
+  filasDetalle = signal<any[]>([]);
   firmaUrl = signal<string | null>(null);
-  filtro = { fecha: '', fichaId: '' };
+  filtro = { fecha: '', fichaId: '', instructorId: '' };
 
-  constructor(private asistencia: AsistenciaService, private api: ApiService) {}
+  constructor(private asistencia: AsistenciaService, private api: ApiService, private toast: ToastService) {}
 
   ngOnInit() {
     this.cargarFichas();
+    this.cargarInstructores();
     this.cargarHistorial();
   }
 
   cargarFichas() {
-    this.api.getFichas().subscribe((list: any[]) => this.fichas.set(list));
+    this.api.getHFichas().subscribe((list: any[]) => this.fichas.set(list));
+  }
+
+  cargarInstructores() {
+    this.api.getInstructores().subscribe((list: any[]) => this.instructores.set(list));
   }
 
   cargarHistorial() {
     this.asistencia.getHistorial(
       this.filtro.fecha || undefined,
-      this.filtro.fichaId ? +this.filtro.fichaId : undefined,
+      this.filtro.fichaId || undefined,
+      this.filtro.instructorId || undefined,
     ).subscribe((list: any) => this.sesiones.set(list));
   }
 
   limpiarFiltros() {
-    this.filtro = { fecha: '', fichaId: '' };
+    this.filtro = { fecha: '', fichaId: '', instructorId: '' };
     this.cargarHistorial();
   }
 
   verDetalle(s: any) {
-    this.asistencia.getSesion(s.id).subscribe((full: any) => this.detalle.set(full));
+    this.asistencia.getSesion(s.id).subscribe((full: any) => {
+      this.detalle.set(full);
+      this.asistencia.getPendientes(s.id).subscribe((ausentes: any) => {
+        const presentesYJustificados = (full.registros ?? []).map((r: any) => ({
+          aprendizId: r.aprendizId,
+          nombre: r.aprendiz?.nombre,
+          apellido: r.aprendiz?.apellido,
+          documento: r.aprendiz?.numDoc,
+          horaRegistro: r.horaRegistro,
+          ipAddress: r.ipAddress,
+          firmaImagen: r.firmaImagen,
+          estado: r.estado,
+        }));
+        const filasAusentes = (ausentes ?? []).map((a: any) => ({
+          aprendizId: a.id,
+          nombre: a.nombre,
+          apellido: a.apellido,
+          documento: a.documento,
+          horaRegistro: null,
+          ipAddress: null,
+          firmaImagen: null,
+          estado: 'ausente',
+        }));
+        this.filasDetalle.set([...presentesYJustificados, ...filasAusentes]);
+      });
+    });
+  }
+
+  marcarFalla(aprendizId: string) {
+    const sesionId = this.detalle()?.id;
+    if (!sesionId) return;
+    this.asistencia.marcarFallaJustificada({ sesionId, aprendizId }).subscribe({
+      next: () => {
+        this.toast.success('Falla marcada como justificada');
+        this.verDetalle(this.detalle());
+        this.cargarHistorial();
+      },
+      error: (err: any) => this.toast.error(err.error?.message || 'No se pudo marcar la falla'),
+    });
   }
 
   verFirma(url: string) {

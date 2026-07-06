@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   Sse,
   MessageEvent,
@@ -77,6 +78,16 @@ export class AsistenciaSesionController {
 
   // ── Consultas por instructor / ficha ─────────────────────────────
 
+  @Roles('admin')
+  @Get('historial')
+  getHistorial(
+    @Query('fecha') fecha?: string,
+    @Query('fichaId') fichaId?: string,
+    @Query('instructorId') instructorId?: string,
+  ) {
+    return this.sesionService.getHistorial({ fecha, fichaId, instructorId });
+  }
+
   @Roles('admin', 'instructor')
   @Get('instructor/:id/activas')
   findActivasByInstructor(@Param('id', ParseUUIDPipe) id: string) {
@@ -87,5 +98,15 @@ export class AsistenciaSesionController {
   @Get('ficha/:id/activa')
   findActivaByFicha(@Param('id', ParseUUIDPipe) id: string) {
     return this.sesionService.findActivaByFicha(id);
+  }
+
+  @Roles('admin', 'instructor')
+  @Get('ficha/:id/reporte-mensual')
+  getReporteMensual(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('anio') anio: string,
+    @Query('mes') mes: string,
+  ) {
+    return this.sesionService.getReporteMensual(id, parseInt(anio, 10), parseInt(mes, 10));
   }
 }

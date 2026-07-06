@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -6,17 +7,18 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { AsistenciaRegistroTenantEntity } from '../infrastructure/entities/tenant/asistencia-registro.tenant-entity';
-import { AsistenciaSesionTenantEntity } from '../infrastructure/entities/tenant/asistencia-sesion.tenant-entity';
-import { AsistenciaTenantEntity } from '../infrastructure/entities/tenant/asistencia.tenant-entity';
-import { EstadoAsistencia } from '../domain/entities/asistencia.entity';
 import { CreateAsistenciaRegistroDto } from '../infrastructure/http/dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from '../infrastructure/http/dto/marcar-falla.dto';
 import { VerificarRostroDto } from '../infrastructure/http/dto/verificar-rostro.dto';
 import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
 import { getBaseFacePath, getAttendanceFacePath, readFileToBase64, saveAttendanceFace } from '../../infrastructure/utils/file-storage.util';
+import { getColombiaDate } from '../../infrastructure/utils/date.util';
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
+import { ASISTENCIA_SESION_REPOSITORY } from '../domain/ports/asistencia-sesion.repository.port';
+import type { AsistenciaSesionRepositoryPort } from '../domain/ports/asistencia-sesion.repository.port';
+import { ASISTENCIA_REGISTRO_REPOSITORY } from '../domain/ports/asistencia-registro.repository.port';
+import type { AsistenciaRegistroRepositoryPort } from '../domain/ports/asistencia-registro.repository.port';
 
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5000';
 
@@ -25,6 +27,10 @@ export class AsistenciaRegistroService {
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly http: HttpService,
+    @Inject(ASISTENCIA_SESION_REPOSITORY)
+    private readonly sesionRepo: AsistenciaSesionRepositoryPort,
+    @Inject(ASISTENCIA_REGISTRO_REPOSITORY)
+    private readonly registroRepo: AsistenciaRegistroRepositoryPort,
   ) {}
 
   private get tenantId(): string {
@@ -33,18 +39,6 @@ export class AsistenciaRegistroService {
       throw new ForbiddenException('No se ha resuelto el tenant para la petición');
     }
     return tenantId;
-  }
-
-  private async getRegistroRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaRegistroTenantEntity);
-  }
-
-  private async getSesionRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaSesionTenantEntity);
-  }
-
-  private async getAsistenciaRepo() {
-    return this.connectionManager.getTenantRepository(this.tenantId, AsistenciaTenantEntity);
   }
 
   private async getPersonaRepo() {
@@ -100,17 +94,11 @@ export class AsistenciaRegistroService {
   }
 
   async registrarFirma(dto: CreateAsistenciaRegistroDto) {
-    const sesionRepo = await this.getSesionRepo();
-    const sesion = await sesionRepo.findOne({
-      where: { id: dto.sesionId },
-    });
+    const sesion = await this.sesionRepo.buscarPorId(dto.sesionId);
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
     if (sesion.estado !== 'activa') throw new ForbiddenException('La sesión no está activa');
 
-    const registroRepo = await this.getRegistroRepo();
-    const existente = await registroRepo.findOne({
-      where: { sesionId: dto.sesionId, aprendizId: dto.aprendizId },
-    });
+    const existente = await this.registroRepo.buscarUno(dto.sesionId, dto.aprendizId);
     if (existente) {
       throw new ForbiddenException('El aprendiz ya registró su asistencia');
     }
@@ -129,47 +117,17 @@ export class AsistenciaRegistroService {
       attendancePhotoPath = saveAttendanceFace(aprendiz.id_persona, dto.faceVerificationImage);
     }
 
-    let asistenciaId: string | null = null;
-    if (sesion.formacionAsistenciaId) {
-      const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
-      const asistenciaRepo = await this.getAsistenciaRepo();
-      let asistencia = await asistenciaRepo.findOne({
-        where: {
-          formacion_fk: sesion.formacionAsistenciaId,
-          aprendizId: aprendiz.id_persona,
-        },
-      });
-      if (asistencia) {
-        asistencia.estado = EstadoAsistencia.asistio;
-        asistencia.hora = horaActual;
-        asistencia = await asistenciaRepo.save(asistencia);
-      } else {
-        asistencia = await asistenciaRepo.save(
-          asistenciaRepo.create({
-            formacion_fk: sesion.formacionAsistenciaId,
-            aprendizId: aprendiz.id_persona,
-            estado: EstadoAsistencia.asistio,
-            hora: horaActual,
-          }),
-        );
-      }
-      asistenciaId = asistencia.id_asistencia;
-    }
-
-    const registro = registroRepo.create({
+    const saved = await this.registroRepo.crear({
       sesionId: dto.sesionId,
       aprendizId: aprendiz.id_persona,
       estado: 'presente',
       firmaImagen: dto.firmaImagen,
-      facePhotoPath: attendancePhotoPath,
+      facePhotoPath: attendancePhotoPath ?? undefined,
       ipAddress: dto.ipAddress,
       latitud: dto.latitud,
       longitud: dto.longitud,
-      asistenciaId,
-    } as any);
-
-    const savedResult = await registroRepo.save(registro);
-    const saved = Array.isArray(savedResult) ? savedResult[0] : savedResult;
+      horaRegistro: getColombiaDate(),
+    });
 
     if (attendancePhotoPath) {
       await personaRepo.update({ id_persona: aprendiz.id_persona }, {
@@ -202,60 +160,24 @@ export class AsistenciaRegistroService {
   }
 
   async marcarFallaJustificada(dto: MarcarFallaDto) {
-    const sesionRepo = await this.getSesionRepo();
-    const sesion = await sesionRepo.findOne({
-      where: { id: dto.sesionId },
-    });
+    const sesion = await this.sesionRepo.buscarPorId(dto.sesionId);
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
 
-    const registroRepo = await this.getRegistroRepo();
-    const existente = await registroRepo.findOne({
-      where: { sesionId: dto.sesionId, aprendizId: dto.aprendizId },
-    });
-
-    let asistenciaId: string | null = null;
-    if (sesion.formacionAsistenciaId) {
-      const horaActual = new Date().toLocaleTimeString('en-GB', { hour12: false });
-      const asistenciaRepo = await this.getAsistenciaRepo();
-      let asistencia = await asistenciaRepo.findOne({
-        where: {
-          formacion_fk: sesion.formacionAsistenciaId,
-          aprendizId: dto.aprendizId,
-        },
-      });
-      if (asistencia) {
-        asistencia.estado = EstadoAsistencia.excusa;
-        asistencia.hora = horaActual;
-        asistencia = await asistenciaRepo.save(asistencia);
-      } else {
-        asistencia = await asistenciaRepo.save(
-          asistenciaRepo.create({
-            formacion_fk: sesion.formacionAsistenciaId,
-            aprendizId: dto.aprendizId,
-            estado: EstadoAsistencia.excusa,
-            hora: horaActual,
-          }),
-        );
-      }
-      asistenciaId = asistencia.id_asistencia;
-    }
+    const existente = await this.registroRepo.buscarUno(dto.sesionId, dto.aprendizId);
 
     if (existente) {
       existente.estado = 'falla_justificada';
       existente.nota = dto.nota || undefined;
       existente.soporteUrl = dto.soporte || undefined;
-      existente.asistenciaId = asistenciaId;
-      return registroRepo.save(existente);
+      return this.registroRepo.guardar(existente);
     }
 
-    const registro = registroRepo.create({
+    return this.registroRepo.crear({
       sesionId: dto.sesionId,
       aprendizId: dto.aprendizId,
       estado: 'falla_justificada',
       nota: dto.nota || undefined,
       soporteUrl: dto.soporte || undefined,
-      asistenciaId,
-    } as any);
-    return registroRepo.save(registro);
+    });
   }
 }

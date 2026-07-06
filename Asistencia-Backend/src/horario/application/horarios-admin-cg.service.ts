@@ -288,6 +288,7 @@ export class HorariosAdminCGService {
       fechaInicio: c.fecha_inicio,
       fechaFin: c.fecha_fin,
       intensidadHoraria: c.intensidad_horaria,
+      lider: c.lider ?? '',
     };
   }
 
@@ -314,7 +315,16 @@ export class HorariosAdminCGService {
     return '00000000-0000-0000-0000-000000000000';
   }
 
-  async createFicha(data: Partial<Ficha>) {
+  private normalizeLider(lider?: any): string {
+    if (!lider) return '';
+    if (typeof lider === 'string') return lider.trim();
+    if (lider.nombre || lider.apellido) {
+      return `${lider.nombre ?? ''} ${lider.apellido ?? ''}`.trim();
+    }
+    return String(lider);
+  }
+
+  async createFicha(data: any) {
     const repo = await this.getRepo(CursoOrmEntity);
     const area_fk = await this.resolveAreaFk(data.area);
     const programa_fk = await this.resolveProgramaFk(data.programa);
@@ -325,13 +335,13 @@ export class HorariosAdminCGService {
       fin_lectiva: data.fechaFin ?? new Date(),
       area_fk,
       programa_fk,
-      lider: '',
+      lider: this.normalizeLider(data.lider),
       intensidad_horaria: data.intensidadHoraria ?? null,
     });
     return this.findOneFicha(item.id_curso);
   }
 
-  async updateFicha(id: string, data: Partial<Ficha>) {
+  async updateFicha(id: string, data: any) {
     const repo = await this.getRepo(CursoOrmEntity);
     const update: any = {
       codigo: data.codigo,
@@ -342,6 +352,7 @@ export class HorariosAdminCGService {
     };
     if (data.area !== undefined) update.area_fk = await this.resolveAreaFk(data.area);
     if (data.programa !== undefined) update.programa_fk = await this.resolveProgramaFk(data.programa);
+    if (data.lider !== undefined) update.lider = this.normalizeLider(data.lider);
     await repo.update({ id_curso: id }, update);
     return this.findOneFicha(id);
   }
