@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
-import { Tenant } from '../../../core/models/user.model';
+import { AuthService } from '../../../core/services/auth.service';
 import { LucideAngularModule } from 'lucide-angular';
 import { SearchableSelectComponent, SSOption } from '../../../shared/components/searchable-select.component';
 import { ToastService } from '../../../core/services/toast.service';
@@ -109,7 +109,7 @@ import { ToastService } from '../../../core/services/toast.service';
               </label>
             </td>
             <td>
-              <span class="badge sede-badge">{{ i.tenantNombre || (tenants().find(t => t.slug === i.tenantSlug)?.nombre) || 'Sin sede' }}</span>
+              <span class="badge sede-badge">{{ sedeNombre() }}</span>
             </td>
           </tr>
           }
@@ -182,7 +182,7 @@ import { ToastService } from '../../../core/services/toast.service';
               <span class="status-text">{{ a.activo ? 'Activo' : 'Inactivo' }}</span>
             </td>
             <td>
-              <span class="badge sede-badge">{{ a.tenantNombre || (tenants().find(t => t.slug === a.tenantSlug)?.nombre) || 'Sin sede' }}</span>
+              <span class="badge sede-badge">{{ sedeNombre() }}</span>
             </td>
           </tr>
           }
@@ -314,12 +314,10 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
   instructores = signal<any[]>([]);
   aprendices = signal<any[]>([]);
   admins = signal<any[]>([]);
-  tenants = signal<Tenant[]>([]);
 
-  tenantsOpts = computed<SSOption[]>(() => [
-    { value: '', label: 'Sin sede' },
-    ...this.tenants().map(t => ({ value: t.slug, label: t.nombre })),
-  ]);
+  /** Un administrador solo gestiona su propia sede: no tiene sentido elegir
+   *  entre sedes, siempre es la del tenant actual. */
+  sedeNombre = computed(() => this.auth.currentTenant()?.nombre ?? 'Sin sede');
 
   // ── Search (debounced) ──────────────────────────────────────
   searchDisplay = '';
@@ -375,7 +373,7 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
 
   private toast = inject(ToastService);
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(private api: ApiService, private router: Router, private auth: AuthService) {}
 
   ngOnInit() {
     this.loadAll();
@@ -393,7 +391,6 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
     this.api.getAdministradores().subscribe(a => this.admins.set(a));
     this.api.getAreas().subscribe(a => this.areas.set(a));
     this.api.getMunicipios().subscribe(m => this.municipios.set(m ?? []));
-    this.api.getTenants().subscribe(t => this.tenants.set(t ?? []));
   }
 
   toggleLider(i: any, event: Event) {
@@ -419,19 +416,6 @@ export class AdminUsuariosComponent implements OnInit, OnDestroy {
         this.toast.success('Área asignada', `El área "${area}" fue asignada al instructor líder.`);
       },
       error: (e) => this.toast.error('Error al asignar área', e?.error?.message ?? 'No se pudo asignar el área.'),
-    });
-  }
-
-  setTenant(u: any, tenantSlug: string) {
-    const documento = u.documento;
-    this.api.updateTenant(documento, tenantSlug || null).subscribe({
-      next: () => {
-        const label = this.tenants().find(t => t.slug === tenantSlug)?.nombre ?? 'Sin sede';
-        u.tenantSlug = tenantSlug || null;
-        u.tenantNombre = label;
-        this.toast.success('Sede actualizada', `${u.nombre} ahora pertenece a ${label}.`);
-      },
-      error: (e) => this.toast.error('Error al actualizar sede', e?.error?.message ?? 'No se pudo cambiar la sede.'),
     });
   }
 

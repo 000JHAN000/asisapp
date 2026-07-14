@@ -25,7 +25,7 @@ import {
   MapPin, Phone, Upload, ExternalLink,
   Save, Edit, Archive, MoreHorizontal, MoreVertical,
   AlertCircle, AlertTriangle,
-  UserPlus, UserMinus, UserCheck,
+  UserPlus, UserMinus, UserCheck, UserX,
   CalendarCheck, CalendarX,
   Zap, Activity, TrendingUp,
   Wifi, WifiOff, RefreshCcw,
@@ -39,6 +39,8 @@ import {
   Copy, Clipboard,
   // Programador de Fichas
   LayoutList, MousePointer, Hand,
+  // Mobile nav
+  Menu,
 } from 'lucide-angular';
 
 export const appConfig: ApplicationConfig = {
@@ -67,7 +69,7 @@ export const appConfig: ApplicationConfig = {
       MapPin, Phone, Upload, ExternalLink,
       Save, Edit, Archive, MoreHorizontal, MoreVertical,
       AlertCircle, AlertTriangle,
-      UserPlus, UserMinus, UserCheck,
+      UserPlus, UserMinus, UserCheck, UserX,
       CalendarCheck, CalendarX,
       Zap, Activity, TrendingUp,
       Wifi, WifiOff, RefreshCcw,
@@ -81,6 +83,8 @@ export const appConfig: ApplicationConfig = {
       Copy, Clipboard,
       // Programador de Fichas
       LayoutList, MousePointer, Hand,
+      // Mobile nav
+      Menu,
     })),
   ],
 };

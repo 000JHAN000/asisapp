@@ -258,6 +258,10 @@ import { jsPDF } from 'jspdf';
                         <span class="badge presente">Presente</span>
                       } @else if (a.estado === 'falla_justificada') {
                         <span class="badge falla">Falla Just.</span>
+                      } @else if (a.estado === 'justificacion_pendiente') {
+                        <span class="badge pendiente">Justif. pendiente</span>
+                      } @else if (a.estado === 'falla_injustificada') {
+                        <span class="badge falla-injustificada">Falla No Just.</span>
                       } @else {
                         <span class="badge pendiente">Pendiente</span>
                       }
@@ -269,10 +273,31 @@ import { jsPDF } from 'jspdf';
                     </td>
                     <td>
                       @if (a.estado === 'presente') {
-                        <button class="btn-icon-sm" title="Marcar falla justificada" (click)="marcarFalla(a.aprendizId)">
+                        <div style="display:flex; gap:4px;">
+                          <button class="btn-icon-sm" title="Marcar falla justificada" (click)="marcarFalla(a.aprendizId)">
+                            <lucide-icon name="file-minus" [size]="14"></lucide-icon>
+                          </button>
+                          <button class="btn-icon-sm" title="Quitar asistencia (no asistió realmente)" (click)="quitarAsistencia(a.id)">
+                            <lucide-icon name="user-x" [size]="14"></lucide-icon>
+                          </button>
+                        </div>
+                      } @else if (a.estado === 'justificacion_pendiente') {
+                        <div style="display:flex; gap:4px;">
+                          <button class="btn-icon-sm" title="Ver nota" (click)="verNotaJustificacion(a)">
+                            <lucide-icon name="file-text" [size]="14"></lucide-icon>
+                          </button>
+                          <button class="btn-icon-sm btn-aprobar" title="Aprobar justificación" (click)="resolverJustificacion(a.id, true)">
+                            <lucide-icon name="check" [size]="14"></lucide-icon>
+                          </button>
+                          <button class="btn-icon-sm btn-rechazar" title="Rechazar justificación" (click)="resolverJustificacion(a.id, false)">
+                            <lucide-icon name="x" [size]="14"></lucide-icon>
+                          </button>
+                        </div>
+                      } @else if (a.estado === 'falla_injustificada' || !a.estado) {
+                        <button class="btn-icon-sm" title="Subir justificación / soporte" (click)="marcarFalla(a.aprendizId)">
                           <lucide-icon name="file-minus" [size]="14"></lucide-icon>
                         </button>
-                      } @else if (!a.estado) {
+                      } @else {
                         <span class="text-muted text-sm">—</span>
                       }
                     </td>
@@ -323,6 +348,28 @@ import { jsPDF } from 'jspdf';
             <button class="btn-icon" (click)="firmaModalUrl.set(null)"><lucide-icon name="x" [size]="18"></lucide-icon></button>
           </div>
           <img [src]="firmaModalUrl()" style="width:100%;border:1px solid var(--border);border-radius:8px;margin-top:8px;">
+        </div>
+      </div>
+    }
+
+    <!-- Modal ver nota de justificación pendiente -->
+    @if (notaJustificacionModal()) {
+      <div class="modal-overlay" (click)="notaJustificacionModal.set(null)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>Justificación de {{ notaJustificacionModal()?.apellido }}, {{ notaJustificacionModal()?.nombre }}</h3>
+            <button class="btn-icon" (click)="notaJustificacionModal.set(null)"><lucide-icon name="x" [size]="18"></lucide-icon></button>
+          </div>
+          <p class="mt-2">{{ notaJustificacionModal()?.nota || 'Sin nota.' }}</p>
+          @if (notaJustificacionModal()?.soporteUrl) {
+            <a [href]="notaJustificacionModal()?.soporteUrl" target="_blank" class="btn btn-outline btn-sm mt-2">
+              <lucide-icon name="paperclip" [size]="14"></lucide-icon> Ver soporte adjunto
+            </a>
+          }
+          <div class="btn-row mt-4">
+            <button class="btn btn-red" (click)="resolverJustificacion(notaJustificacionModal()!.id, false); notaJustificacionModal.set(null)">Rechazar</button>
+            <button class="btn btn-blue" (click)="resolverJustificacion(notaJustificacionModal()!.id, true); notaJustificacionModal.set(null)">Aprobar</button>
+          </div>
         </div>
       </div>
     }
@@ -710,6 +757,10 @@ import { jsPDF } from 'jspdf';
     .btn-icon { background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; }
     .btn-icon-sm { width: 28px; height: 28px; border-radius: 6px; background: none; border: 1px solid var(--border); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
     .btn-icon-sm:hover { background: var(--gray-100); color: var(--text); }
+    .btn-icon-sm.btn-aprobar { border-color: #86efac; color: #16a34a; }
+    .btn-icon-sm.btn-aprobar:hover { background: #dcfce7; }
+    .btn-icon-sm.btn-rechazar { border-color: #fca5a5; color: #dc2626; }
+    .btn-icon-sm.btn-rechazar:hover { background: #fee2e2; }
     .btn-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
     .form-group { display: flex; flex-direction: column; gap: 4px; }
     .form-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
@@ -791,6 +842,7 @@ import { jsPDF } from 'jspdf';
     .badge.presente { background: #dcfce7; color: #166534; }
     .badge.falla { background: #fee2e2; color: #991b1b; }
     .badge.pendiente { background: #fef3c7; color: #92400e; }
+    .badge.falla-injustificada { background: #fecaca; color: #7f1d1d; }
     .ip-badge { font-size: 11px; font-family: monospace; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; cursor: default; }
     .ip-duplicada { background: #fffbeb !important; }
     .ip-duplicada td { border-left: 3px solid #f59e0b; }
@@ -839,9 +891,14 @@ import { jsPDF } from 'jspdf';
     .pdf-footer { margin-top: 20px; font-size: 10px; color: #64748b; text-align: center; border-top: 2px solid #e2e8f0; padding-top: 10px; }
 
     /* ── Reporte Modal ────────────────────────────────── */
-    .reporte-modal { background: #f1f5f9; padding: 0; overflow: hidden; }
-    .reporte-content { background: #fff; padding: 24px; margin: 0; }
-    .rm-filtros { display: flex; align-items: flex-end; gap: 12px; padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    /* Columna flex: header/filtros/acciones quedan fijos y solo .reporte-content
+       (o el empty-state) hace scroll interno, así el botón de descarga siempre
+       queda alcanzable sin importar qué tan largo sea el reporte. */
+    .reporte-modal { background: #f1f5f9; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh; }
+    .reporte-modal .modal-header { flex-shrink: 0; padding: 16px 24px 0; margin-bottom: 0; }
+    .reporte-modal .empty-state { flex-shrink: 0; }
+    .reporte-content { background: #fff; padding: 24px; margin: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+    .rm-filtros { display: flex; align-items: flex-end; gap: 12px; padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
     .rm-filtros .form-group { min-width: 200px; }
     .rep-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; border-bottom: 3px solid #00324d; padding-bottom: 14px; }
     .rep-logo { width: 60px; height: 60px; background: #00324d; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; border-radius: 6px; flex-shrink: 0; }
@@ -879,7 +936,7 @@ import { jsPDF } from 'jspdf';
     .rep-b-pendiente { background: #fef3c7; color: #92400e; }
     .rep-firma { width: 60px; height: 30px; object-fit: contain; }
     .rep-footer { margin-top: 16px; font-size: 10px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-    .rep-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 24px; background: #fff; border-top: 1px solid #e2e8f0; }
+    .rep-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 24px; background: #fff; border-top: 1px solid #e2e8f0; flex-shrink: 0; }
     .spin { display: inline-block; animation: spin 1s linear infinite; }
     .rep-alerta-ip { display: flex; gap: 10px; align-items: flex-start; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 12px 14px; color: #92400e; font-size: 13px; margin-bottom: 16px; }
     .rep-alerta-ip strong { color: #b45309; }
@@ -887,6 +944,20 @@ import { jsPDF } from 'jspdf';
     .rep-ip-badge { font-size: 10px; font-family: monospace; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; }
     .rep-table tr.rep-ip-dup { background: #fffbeb !important; }
     .rep-table tr.rep-ip-dup td { border-left: 3px solid #f59e0b; }
+
+    /* ── Responsive: reporte mensual en pantallas pequeñas ─── */
+    @media (max-width: 640px) {
+      .modal-overlay { padding: 8px; }
+      .reporte-modal { max-height: 96vh; }
+      .reporte-modal .modal-header { padding: 12px 14px 0; }
+      .rm-filtros { padding: 12px 14px; flex-direction: column; align-items: stretch; }
+      .rm-filtros .form-group { min-width: 0; width: 100%; }
+      .rm-filtros button { width: 100%; justify-content: center; }
+      .reporte-content { padding: 14px; }
+      .rep-table { font-size: 10px; }
+      .rep-table th, .rep-table td { padding: 4px; }
+      .rep-actions { padding: 12px 14px; }
+    }
   `],
 })
 export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
@@ -901,6 +972,7 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
   firmaModalUrl = signal<string | null>(null);
   fallaModalOpen = signal(false);
   fallaAprendizId = signal<number | null>(null);
+  notaJustificacionModal = signal<any>(null);
   fallaNota = '';
   fallaSoporteFile: File | null = null;
   fallaSoporteUrl = '';
@@ -954,8 +1026,8 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
   // Tabla combinada: registros + pendientes
   todosAprendices = computed(() => {
     const regs = this.registros().map((r: any) => ({
-      ...r,
       ...r.aprendiz,
+      ...r,
       aprendizId: r.aprendizId,
       horaRegistro: r.horaRegistro,
       estado: r.estado,
@@ -1161,6 +1233,35 @@ export class InstructorAsistenciaComponent implements OnInit, OnDestroy {
 
   verFirma(url: string) {
     this.firmaModalUrl.set(url);
+  }
+
+  verNotaJustificacion(registro: any) {
+    this.notaJustificacionModal.set(registro);
+  }
+
+  quitarAsistencia(registroId: string) {
+    if (!registroId) return;
+    if (!confirm('¿Quitar la marca de asistencia? El aprendiz volverá a quedar como pendiente.')) return;
+    const sesionId = this.sesionActiva()?.id;
+    this.asistencia.quitarAsistencia(registroId).subscribe({
+      next: () => {
+        this.toast.success('Asistencia removida');
+        if (sesionId) this.cargarDetalleSesion(sesionId);
+      },
+      error: (err: any) => this.toast.error(err.error?.message || 'Error al quitar la asistencia'),
+    });
+  }
+
+  resolverJustificacion(registroId: string, aprobar: boolean) {
+    if (!registroId) return;
+    const sesionId = this.sesionActiva()?.id;
+    this.asistencia.resolverJustificacion(registroId, aprobar).subscribe({
+      next: () => {
+        this.toast.success(aprobar ? 'Justificación aprobada' : 'Justificación rechazada');
+        if (sesionId) this.cargarDetalleSesion(sesionId);
+      },
+      error: (err: any) => this.toast.error(err.error?.message || 'Error al resolver la justificación'),
+    });
   }
 
   cerrarSesion() {

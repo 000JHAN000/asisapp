@@ -1,32 +1,27 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UsuarioOrmEntity } from './../infrastructure/entities/usuario.orm-entity';
-import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.orm-entity';
+import { UsuarioMaestro } from 'src/auth/infrastructure/entities/usuario-maestro.orm-entity';
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 
 @Injectable()
 export class UsuariosCGService {
   constructor(
-    @InjectRepository(UsuarioOrmEntity)
-    private readonly usuarioRepo: Repository<UsuarioOrmEntity>,
-    @InjectRepository(PersonaOrmEntity)
-    private readonly personaRepo: Repository<PersonaOrmEntity>,
+    // El listado de instructores/aprendices (AprendicesCGService/InstructoresCGService)
+    // lee activo/municipio/tenantSlug desde auth.usuario_maestro, así que las
+    // actualizaciones deben escribir ahí también — de lo contrario el cambio se
+    // "revierte" en la siguiente carga porque nunca se guardó donde se lee.
+    @InjectRepository(UsuarioMaestro)
+    private readonly usuarioMaestroRepo: Repository<UsuarioMaestro>,
     private readonly tenantConnectionManager: TenantConnectionManager,
   ) {}
 
-  private async findUsuarioByDocumento(documento: string) {
-    const persona = await this.personaRepo.findOne({ where: { documento } });
-    if (!persona) {
-      throw new NotFoundException(`Usuario con documento ${documento} no encontrado`);
-    }
-    const usuario = await this.usuarioRepo.findOne({
-      where: { persona_fk: persona.id_persona },
-    });
+  private async findUsuarioMaestro(documento: string) {
+    const usuario = await this.usuarioMaestroRepo.findOne({ where: { documento } });
     if (!usuario) {
       throw new NotFoundException(`Usuario con documento ${documento} no encontrado`);
     }
-    return { usuario, persona };
+    return usuario;
   }
 
   async updateTenantByDocumento(documento: string, tenantSlug: string | null) {
@@ -42,14 +37,14 @@ export class UsuariosCGService {
       }
     }
 
-    const { usuario } = await this.findUsuarioByDocumento(documento);
-    usuario.tenant_slug = tenantSlug || null;
-    await this.usuarioRepo.save(usuario);
+    const usuario = await this.findUsuarioMaestro(documento);
+    usuario.tenantSlug = tenantSlug || null;
+    await this.usuarioMaestroRepo.save(usuario);
 
     return {
-      id: usuario.id_usuario,
+      id: usuario.id,
       documento,
-      tenantSlug: usuario.tenant_slug,
+      tenantSlug: usuario.tenantSlug,
     };
   }
 
@@ -58,12 +53,12 @@ export class UsuariosCGService {
       throw new BadRequestException('El documento es requerido');
     }
 
-    const { usuario } = await this.findUsuarioByDocumento(documento);
+    const usuario = await this.findUsuarioMaestro(documento);
     usuario.activo = activo;
-    await this.usuarioRepo.save(usuario);
+    await this.usuarioMaestroRepo.save(usuario);
 
     return {
-      id: usuario.id_usuario,
+      id: usuario.id,
       documento,
       activo: usuario.activo,
     };
@@ -74,14 +69,14 @@ export class UsuariosCGService {
       throw new BadRequestException('El documento es requerido');
     }
 
-    const { persona } = await this.findUsuarioByDocumento(documento);
-    persona.municipio_nombre = municipio || null;
-    await this.personaRepo.save(persona);
+    const usuario = await this.findUsuarioMaestro(documento);
+    usuario.municipio = municipio || null;
+    await this.usuarioMaestroRepo.save(usuario);
 
     return {
-      id: persona.id_persona,
+      id: usuario.id,
       documento,
-      municipio: persona.municipio_nombre,
+      municipio: usuario.municipio,
     };
   }
 }

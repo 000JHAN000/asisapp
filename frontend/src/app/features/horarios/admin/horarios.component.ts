@@ -641,6 +641,10 @@ const JORNADAS = [
                   @if (!isInstructorTransversal(d)) {
                     <app-ss [options]="getAmbientesOpts(d)"
                             placeholder="Seleccionar ambiente..."
+                            emptyMessage="No hay ambientes creados."
+                            emptyLink="/dev/formativo"
+                            [emptyLinkQueryParams]="{ tab: 'ambientes', new: '1' }"
+                            emptyLinkText="Créalo en Formativo →"
                             [(ngModel)]="wizardForm.diasConfig[d].ambienteId"
                             (ngModelChange)="onAmbienteChange(d, $event)"></app-ss>
                   } @else {
@@ -1838,7 +1842,7 @@ export class AdminHorariosComponent implements OnInit, OnDestroy {
   @media print{body{background:#fff;padding:0}.card{box-shadow:none}}
 </style></head><body><div class="wrap">
 <div class="header">
-  <h1>Reporte Diario — ChronoGest</h1>
+  <h1>Reporte Diario — AsisApp</h1>
   <p>${fechaLabel.charAt(0).toUpperCase() + fechaLabel.slice(1)} &nbsp;·&nbsp; Generado a las ${horaLabel}</p>
 </div>
 <div class="cards">

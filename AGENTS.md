@@ -58,6 +58,39 @@ El flujo de autenticación es:
 - Para el rol **aprendiz**, si el frontend envía `fichaId`, el backend también crea la **matrícula** en el tenant. Esto permite que, al iniciar sesión, el aprendiz reciba su `fichaId` y pueda ver las sesiones de asistencia activas de su ficha.
 - El registro valida que no exista ya una persona con el mismo correo o documento.
 
+### Registro masivo de usuarios
+
+La pantalla **Registro Masivo** permite a un administrador subir un archivo Excel/CSV para crear aprendices o instructores en bloque dentro de su sede.
+
+```
+POST /api/admin/registro-masivo?tipo=aprendices|instructores
+Content-Type: multipart/form-data
+Body: file (archivo .xlsx, .xls o .csv)
+Headers: Authorization: Bearer <token>, x-tenant-id: <slug>
+```
+
+**Columnas esperadas:**
+
+- **Aprendices:** `nombre`, `apellido`, `tipo_doc`, `num_doc`, `correo`, `telefono`, `ficha_codigo`, `genero`, `municipio`
+- **Instructores:** `nombre`, `apellido`, `tipo_doc`, `num_doc`, `correo`, `telefono`, `genero`, `municipio`, `area`
+
+Los campos `nombre`, `apellido`, `num_doc` y `correo` son obligatorios. La contraseña inicial de cada usuario es su número de documento (`num_doc`).
+
+**Respuesta:**
+
+```json
+{
+  "total": 10,
+  "exitosos": 8,
+  "fallidos": 2,
+  "errores": [
+    { "fila": 3, "datos": { ... }, "error": "La ficha '2557890' no existe en esta sede" }
+  ]
+}
+```
+
+Por cada fila exitosa el backend crea: persona, usuario, credencial y `usuario_maestro` en `sena_db`; y el perfil correspondiente en la BD del tenant (matrícula para aprendices, instructor para instructores). Las filas con error no detienen el procesamiento de las demás.
+
 ### Fichas e instructor líder
 
 - El Programador de Fichas (`/app/admin/programador-fichas`) usa el modal **Nueva Ficha** para crear un `Curso` en el tenant.

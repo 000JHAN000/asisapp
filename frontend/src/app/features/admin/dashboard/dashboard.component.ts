@@ -13,7 +13,7 @@ import { LucideAngularModule } from 'lucide-angular';
     <div class="welcome-banner">
       <div class="banner-text">
         <h2>¡Bienvenido, {{ user()?.nombre }}!</h2>
-        <p>Panel de Administrador — ChronoGest SENA</p>
+        <p>Panel de Administrador — AsisApp SENA</p>
       </div>
       <lucide-icon name="settings" [size]="52" class="banner-icon"></lucide-icon>
     </div>

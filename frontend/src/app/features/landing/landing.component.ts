@@ -1,19 +1,21 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
+import { ChatWidgetComponent } from '../../shared/components/chat-widget.component';
 
 @Component({
   selector: 'app-landing',
   imports: [
     RouterLink,
     LucideAngularModule,
+    ChatWidgetComponent,
   ],
   template: `
     <!-- NAVBAR -->
     <nav class="landing-nav">
       <div class="nav-logo">
         <lucide-icon name="calendar" [size]="22" class="logo-icon"></lucide-icon>
-        <span class="logo-text">ChronoGest</span>
+        <span class="logo-text">AsisApp</span>
       </div>
       <div class="nav-actions">
         <a routerLink="/login" class="btn-login">Iniciar sesión</a>
@@ -78,7 +80,7 @@ import { LucideAngularModule } from 'lucide-angular';
         <div class="footer-left">
           <div class="footer-logo">
             <lucide-icon name="calendar" [size]="18"></lucide-icon>
-            <span>ChronoGest v2.1-V</span>
+            <span>AsisApp v2.1-V</span>
           </div>
           <p>Servicio Nacional de Aprendizaje — SENA Colombia</p>
         </div>
@@ -88,6 +90,8 @@ import { LucideAngularModule } from 'lucide-angular';
         </div>
       </div>
     </footer>
+
+    <app-chat-widget></app-chat-widget>
   `,
   styles: [`
     :host { display: block; }

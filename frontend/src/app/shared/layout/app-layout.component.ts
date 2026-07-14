@@ -8,23 +8,29 @@ import { ApiService } from '../../core/services/api.service';
 import { HttpClient } from '@angular/common/http';
 import { LucideAngularModule } from 'lucide-angular';
 import { ToastComponent } from '../components/toast.component';
+import { ChatWidgetComponent } from '../components/chat-widget.component';
 
 @Component({
   selector: 'app-layout',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive,
-    LucideAngularModule, ToastComponent,
+    LucideAngularModule, ToastComponent, ChatWidgetComponent,
   ],
   template: `
     <div class="app-layout" [class.dark]="theme.isDark()">
 
+      <!-- Backdrop del menú móvil -->
+      @if (mobileMenuOpen()) {
+        <div class="mobile-sidebar-backdrop" (click)="mobileMenuOpen.set(false)"></div>
+      }
+
       <!-- SIDEBAR -->
-      <aside class="sidebar" [class.collapsed]="collapsed()">
+      <aside class="sidebar" [class.collapsed]="collapsed()" [class.mobile-open]="mobileMenuOpen()">
         <div class="sidebar-top">
           <div class="sidebar-logo">
             <lucide-icon name="calendar" [size]="22" class="sidebar-logo-icon"></lucide-icon>
             @if (!collapsed()) {
-              <span class="sidebar-logo-text">ChronoGest</span>
+              <span class="sidebar-logo-text">AsisApp</span>
             }
           </div>
         </div>
@@ -43,7 +49,7 @@ import { ToastComponent } from '../components/toast.component';
                 @if (expandedMenus()[item.label]) {
                   <div class="nav-submenu">
                     @for (child of item.children; track child.path) {
-                      <a class="nav-item submenu-item" [routerLink]="child.path" routerLinkActive="active" [title]="collapsed() ? child.label : ''" [style.justify-content]="collapsed() ? 'center' : 'flex-start'">
+                      <a class="nav-item submenu-item" [routerLink]="child.path" routerLinkActive="active" [title]="collapsed() ? child.label : ''" [style.justify-content]="collapsed() ? 'center' : 'flex-start'" (click)="mobileMenuOpen.set(false)">
                         @if (child.icon) {
                           <lucide-icon [name]="child.icon" [size]="14" class="nav-icon" style="opacity:.7"></lucide-icon>
                         } @else if (collapsed()) {
@@ -59,7 +65,7 @@ import { ToastComponent } from '../components/toast.component';
               </div>
             } @else {
               <a class="nav-item" [routerLink]="item.path" routerLinkActive="active"
-                 [title]="collapsed() ? item.label : ''">
+                 [title]="collapsed() ? item.label : ''" (click)="mobileMenuOpen.set(false)">
                 <lucide-icon [name]="item.icon" [size]="20" class="nav-icon"></lucide-icon>
                 @if (!collapsed()) { <span class="nav-label">{{ item.label }}</span> }
               </a>
@@ -77,6 +83,9 @@ import { ToastComponent } from '../components/toast.component';
 
         <!-- HEADER -->
         <header class="app-header">
+          <button class="mobile-menu-btn" (click)="mobileMenuOpen.set(true)" title="Menú">
+            <lucide-icon name="menu" [size]="22"></lucide-icon>
+          </button>
           <div class="header-left">
             <div class="header-sena">
               <img src="assets/logo-sena-blanco.png" alt="SENA" class="header-sena-logo"
@@ -292,6 +301,9 @@ import { ToastComponent } from '../components/toast.component';
 
       <!-- Global toast notifications -->
       <app-toast></app-toast>
+
+      <!-- Asistente de chat flotante -->
+      <app-chat-widget></app-chat-widget>
     </div>
   `,
   styles: [`
@@ -356,6 +368,15 @@ import { ToastComponent } from '../components/toast.component';
       transition: background .15s;
     }
     .sidebar-collapse:hover { background: rgba(255,255,255,.15); }
+
+    /* Menú móvil: oculto en escritorio */
+    .mobile-menu-btn {
+      display: none; width: 36px; height: 36px; border-radius: 8px; border: none;
+      background: transparent; cursor: pointer; color: var(--text);
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .mobile-menu-btn:hover { background: var(--gray-100); }
+    .mobile-sidebar-backdrop { display: none; }
 
     /* Header */
     .app-header {
@@ -490,10 +511,40 @@ import { ToastComponent } from '../components/toast.component';
       display: flex; align-items: center; gap: 4px; transition: background .15s;
     }
     .btn-leer-alerta:hover { background: #fef3c7; }
+
+    /* ── Responsive: menú lateral como panel deslizable en móvil ──────────
+       Todo el comportamiento de escritorio (sidebar fija, colapsar/expandir,
+       submenús) queda intacto arriba; aquí solo se sobrescribe para pantallas
+       angostas, donde la sidebar fija tapaba el contenido. ──────────────── */
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: flex; }
+
+      .sidebar {
+        width: var(--sidebar-w); min-width: var(--sidebar-w);
+        transform: translateX(-100%);
+        transition: transform .25s;
+      }
+      .sidebar.collapsed { width: var(--sidebar-w); min-width: var(--sidebar-w); }
+      .sidebar.mobile-open { transform: translateX(0); }
+
+      .mobile-sidebar-backdrop {
+        display: block; position: fixed; inset: 0;
+        background: rgba(0,0,0,.4); z-index: 49;
+      }
+
+      .main-content, .main-content.collapsed { margin-left: 0; }
+
+      .app-header { padding: 0 16px; }
+      .header-sub, .tenant-badge { display: none; }
+      .page-body { padding: 16px; }
+
+      .notif-panel { right: 8px; left: 8px; width: auto; }
+    }
   `],
 })
 export class AppLayoutComponent implements OnDestroy {
   collapsed = signal(false);
+  mobileMenuOpen = signal(false);
   menuOpen = signal(false);
   notifOpen = signal(false);
   profileOpen = signal(false);
@@ -608,7 +659,10 @@ export class AppLayoutComponent implements OnDestroy {
     // Auto-expandir en cada navegación
     this._routerSub = this.router.events.pipe(
       filter(e => e instanceof NavigationEnd),
-    ).subscribe(e => this.autoExpandForUrl((e as NavigationEnd).urlAfterRedirects));
+    ).subscribe(e => {
+      this.autoExpandForUrl((e as NavigationEnd).urlAfterRedirects);
+      this.mobileMenuOpen.set(false);
+    });
   }
 
   ngOnDestroy() {

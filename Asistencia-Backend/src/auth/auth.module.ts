@@ -16,6 +16,7 @@ import { RebacGuard }            from './infrastructure/guards/rebac.guard';
 import { AUTH_REPOSITORY }       from './domain/ports/auth.repository.port';
 import { PersonaOrmEntity } from 'src/persona/infrastructure/entities/persona.orm-entity';
 import { UsuarioOrmEntity } from 'src/usuario/infrastructure/entities/usuario.orm-entity';
+import { UsuarioMaestro } from './infrastructure/entities/usuario-maestro.orm-entity';
 import { TenantModule } from 'src/auth/infrastructure/persistence/tenants/tenant.module';
 import { AuthCGController } from './infrastructure/http/auth-cg.controller';
 import { AuthCGService } from './application/auth-cg.service';
@@ -31,7 +32,7 @@ import { AuthCGService } from './application/auth-cg.service';
         signOptions: { expiresIn: config.get<string>('JWT_EXPIRES')! as `${number}${'s'|'m'|'h'|'d'}` },
       }),
     }),
-    TypeOrmModule.forFeature([CredencialOrmEntity, AccesoOrmEntity, RolOrmEntity, PersonaOrmEntity, UsuarioOrmEntity]),
+    TypeOrmModule.forFeature([CredencialOrmEntity, AccesoOrmEntity, RolOrmEntity, PersonaOrmEntity, UsuarioOrmEntity, UsuarioMaestro]),
     TenantModule,
   ],
   controllers: [AuthController, AuthCGController],

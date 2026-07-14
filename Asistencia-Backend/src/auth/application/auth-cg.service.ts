@@ -15,6 +15,7 @@ import { RolOrmEntity } from 'src/rol/infrastructure/entities/rol.orm-entity';
 import { ConfiguracionAppOrmEntity } from 'src/aplicativo/infrastructure/entities/configuracion-app.orm-entity';
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
+import { UsuarioMaestro } from '../infrastructure/entities/usuario-maestro.orm-entity';
 
 @Injectable()
 export class AuthCGService {
@@ -29,6 +30,8 @@ export class AuthCGService {
     private readonly personaRepo: Repository<PersonaOrmEntity>,
     @InjectRepository(RolOrmEntity)
     private readonly rolRepo: Repository<RolOrmEntity>,
+    @InjectRepository(UsuarioMaestro)
+    private readonly usuarioMaestroRepo: Repository<UsuarioMaestro>,
     private readonly jwtService: JwtService,
     private readonly tenantConnectionManager: TenantConnectionManager,
   ) {}
@@ -227,6 +230,20 @@ export class AuthCGService {
       password: hashed,
       rol_fk: rolEntity.id_rol,
       usuario_fk: usuario.id_usuario,
+    });
+
+    // auth.usuario_maestro es lo que leen los listados de instructores/aprendices/administradores
+    // (activo, municipio, tipoDoc, tenantSlug); sin esta fila esos datos nunca se pueden
+    // mostrar ni actualizar para el usuario recién registrado.
+    await this.usuarioMaestroRepo.save({
+      correo,
+      documento,
+      password: hashed,
+      rol,
+      personaId: persona.id_persona,
+      activo: true,
+      tipoDoc: tipoDoc ?? null,
+      tenantSlug: resolvedTenantSlug,
     });
 
     if (resolvedTenantSlug) {

@@ -4,6 +4,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LucideAngularModule } from 'lucide-angular';
@@ -137,7 +138,7 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
 @Component({
   selector: 'app-programador-fichas',
   standalone: true,
-  imports: [FormsModule, LucideAngularModule, SearchableSelectComponent, DecimalPipe],
+  imports: [FormsModule, LucideAngularModule, SearchableSelectComponent, DecimalPipe, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
 <!-- ── Cabecera ── -->
@@ -838,12 +839,28 @@ function toIso(v: any): string { return v ? String(v).slice(0, 10) : ''; }
 
         <div class="form-group">
           <label class="form-label">Programa *</label>
-          <input class="form-control" [ngModel]="nfPrograma()" (ngModelChange)="nfPrograma.set($event)" placeholder="Ej: Tecnólogo en ADSO" />
+          @if (programasFormativo().length > 0) {
+            <app-ss [options]="nfProgramaOpts()" placeholder="Seleccionar programa..."
+                    [ngModel]="nfPrograma()" (ngModelChange)="nfPrograma.set($event)"></app-ss>
+          } @else {
+            <p class="text-sm text-muted">
+              No hay programas creados en esta sede.
+              <a routerLink="/dev/formativo" [queryParams]="{ tab: 'programas', new: '1' }" style="font-weight:600;color:var(--blue)">Créalo en Formativo</a>.
+            </p>
+          }
         </div>
 
         <div class="form-group">
           <label class="form-label">Área de formación *</label>
-          <input class="form-control" [ngModel]="nfArea()" (ngModelChange)="nfArea.set($event)" placeholder="Ej: TIC" />
+          @if (areasFormativo().length > 0) {
+            <app-ss [options]="nfAreaOpts()" placeholder="Seleccionar área..."
+                    [ngModel]="nfArea()" (ngModelChange)="nfArea.set($event)"></app-ss>
+          } @else {
+            <p class="text-sm text-muted">
+              No hay áreas creadas en esta sede.
+              <a routerLink="/dev/formativo" [queryParams]="{ tab: 'areas', new: '1' }" style="font-weight:600;color:var(--blue)">Créala en Formativo</a>.
+            </p>
+          }
         </div>
 
         <div class="grid-2">
@@ -1199,6 +1216,8 @@ export class ProgramadorFichasComponent implements OnInit {
 
   // ── Modal nueva ficha ───────────────────────────────────────────
   instructores   = signal<any[]>([]);
+  areasFormativo = signal<any[]>([]);
+  programasFormativo = signal<any[]>([]);
   fichaModalOpen = signal(false);
   nfCodigo       = signal('');
   nfPrograma     = signal('');
@@ -1208,6 +1227,16 @@ export class ProgramadorFichasComponent implements OnInit {
   nfIntensidad   = signal<number | null>(null);
   nfLider        = signal<string>('');
   nfSaving       = signal(false);
+
+  // ── Computed: opciones para el modal de Nueva Ficha (área/programa ya
+  // registrados en la sede vía Formativo, para no permitir escribir nombres
+  // que no existen) ──────────────────────────────────────────────
+  nfAreaOpts = computed((): SSOption[] =>
+    this.areasFormativo().map(a => ({ value: a.nombre, label: a.nombre })),
+  );
+  nfProgramaOpts = computed((): SSOption[] =>
+    this.programasFormativo().map(p => ({ value: p.nombre, label: p.nombre })),
+  );
 
   // ── Computed: opciones filtros ────────────────────────────────
   areas = computed((): SSOption[] => {
@@ -1399,10 +1428,14 @@ export class ProgramadorFichasComponent implements OnInit {
     forkJoin({
       fichas: this.api.getHFichas(),
       instructores: this.api.getHInstructores(),
+      areasFormativo: this.api.getAreas(),
+      programasFormativo: this.api.getProgramas(),
     }).subscribe({
-      next: ({ fichas, instructores }) => {
+      next: ({ fichas, instructores, areasFormativo, programasFormativo }) => {
         this.fichas.set(fichas as any[]);
         this.instructores.set(instructores as any[]);
+        this.areasFormativo.set(areasFormativo as any[]);
+        this.programasFormativo.set(programasFormativo as any[]);
         this.cdr.markForCheck(); this.cdr.detectChanges();
       },
       error: () => this.toast.error('Error cargando datos iniciales'),

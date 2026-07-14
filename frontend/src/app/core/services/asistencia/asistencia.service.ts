@@ -21,6 +21,9 @@ export class AsistenciaService {
   registrarFirma(dto: any) { return this.http.post(`${BASE}/registros/firma`, dto); }
   marcarFallaJustificada(dto: any) { return this.http.patch(`${BASE}/registros/falla-justificada`, dto); }
   getPendientes(sesionId: string | number) { return this.http.get(`${BASE}/sesiones/${sesionId}/pendientes`); }
+  solicitarJustificacion(dto: any) { return this.http.post(`${BASE}/registros/justificacion`, dto); }
+  resolverJustificacion(registroId: string, aprobar: boolean) { return this.http.patch(`${BASE}/registros/${registroId}/resolver-justificacion`, { aprobar }); }
+  quitarAsistencia(registroId: string) { return this.http.delete(`${BASE}/registros/${registroId}`); }
 
   // SSE para firmas en tiempo real
   connectStream(sesionId: number): EventSource {
@@ -44,6 +47,10 @@ export class AsistenciaService {
 
   getSesionActivaByFicha(fichaId: string | number) {
     return this.http.get(`${BASE}/ficha/${fichaId}/activa`);
+  }
+
+  getMisSesiones(fichaId: string | number) {
+    return this.http.get(`${BASE}/ficha/${fichaId}/mis-sesiones`);
   }
 
   getReporteMensual(fichaId: string | number, anio: number, mes: number) {

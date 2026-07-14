@@ -1,9 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { EntityTarget, ObjectLiteral, Repository } from 'typeorm';
 
-import { Ficha } from 'src/curso/infrastructure/entities/ficha.orm-entity';
 import { AdministradorOrmEntity } from 'src/persona/infrastructure/entities/administrador.orm-entity';
-import { AmbienteCG } from 'src/ambiente/infrastructure/entities/ambiente-cg.orm-entity';
 import { CompetenciaOrmEntity } from 'src/modulo/infrastructure/entities/competencia.orm-entity';
 import { EventoOrmEntity } from 'src/aplicativo/infrastructure/entities/evento.orm-entity';
 import { SolicitudCambioOrmEntity } from 'src/aplicativo/infrastructure/entities/solicitud-cambio.orm-entity';
@@ -22,6 +20,13 @@ import { AreaOrmEntity } from 'src/area/infrastructure/entities/area.orm-entity'
 
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
+
+interface AmbienteCGData {
+  nombre?: string;
+  capacidad?: number | null;
+  tipo?: string | null;
+  area?: string;
+}
 
 @Injectable()
 export class HorariosAdminCGService {
@@ -312,7 +317,11 @@ export class HorariosAdminCGService {
     }
     const first = await programaRepo.findOne({ where: {}, order: { id_programa: 'ASC' } });
     if (first) return first.id_programa;
-    return '00000000-0000-0000-0000-000000000000';
+    throw new BadRequestException(
+      programaNombre
+        ? `No existe un programa llamado "${programaNombre}". Crea el programa primero.`
+        : 'No hay ningún programa registrado en esta sede. Crea un programa primero.',
+    );
   }
 
   private normalizeLider(lider?: any): string {
@@ -399,10 +408,14 @@ export class HorariosAdminCGService {
     }
     const first = await areaRepo.findOne({ where: {}, order: { id_area: 'ASC' } });
     if (first) return first.id_area;
-    return '00000000-0000-0000-0000-000000000000';
+    throw new BadRequestException(
+      areaNombre
+        ? `No existe un área llamada "${areaNombre}". Crea el área primero.`
+        : 'No hay ninguna área registrada en esta sede. Crea un área primero.',
+    );
   }
 
-  async createAmbiente(data: Partial<AmbienteCG>) {
+  async createAmbiente(data: AmbienteCGData) {
     const repo = await this.getRepo(AmbienteOrmEntity);
     const area_fk = await this.resolveAreaFk(data.area);
     const item = await repo.save({
@@ -414,7 +427,7 @@ export class HorariosAdminCGService {
     return this.findOneAmbiente(item.id_ambiente);
   }
 
-  async updateAmbiente(id: string, data: Partial<AmbienteCG>) {
+  async updateAmbiente(id: string, data: AmbienteCGData) {
     const repo = await this.getRepo(AmbienteOrmEntity);
     const update: any = {
       nombre: data.nombre,

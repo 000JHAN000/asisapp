@@ -9,12 +9,15 @@ import {
   Query,
   Req,
   Sse,
+  UseGuards,
   MessageEvent,
 } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { AsistenciaSesionService } from '../../application/asistencia-sesion.service';
 import { CreateAsistenciaSesionDto } from './dto/create-asistencia-sesion.dto';
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
+import { Public } from 'src/auth/infrastructure/decorators/public.decorator';
+import { BotApiKeyGuard } from '../guards/bot-api-key.guard';
 
 // Event emitter global simple para SSE
 const sseSubjects = new Map<string, Subject<MessageEvent>>();
@@ -98,6 +101,30 @@ export class AsistenciaSesionController {
   @Get('ficha/:id/activa')
   findActivaByFicha(@Param('id', ParseUUIDPipe) id: string) {
     return this.sesionService.findActivaByFicha(id);
+  }
+
+  @Roles('aprendiz', 'admin')
+  @Get('ficha/:id/mis-sesiones')
+  misSesiones(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
+    const aprendizId = req.user.perfilId || req.user.sub;
+    return this.sesionService.misSesionesRecientes(id, aprendizId);
+  }
+
+  // ── Consulta para el bot (n8n) ────────────────────────────────────
+  // Sin JWT de usuario (llamado servidor-a-servidor desde n8n); protegido
+  // por un header x-bot-secret en vez de la sesión normal de la app.
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @Get('registros/consulta/:identificador')
+  consultarParaBot(@Param('identificador') identificador: string) {
+    return this.sesionService.consultarPorIdentificador(identificador);
+  }
+
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @Get('horario/consulta/:identificador')
+  consultarHorarioParaBot(@Param('identificador') identificador: string) {
+    return this.sesionService.consultarHorarioPorIdentificador(identificador);
   }
 
   @Roles('admin', 'instructor')

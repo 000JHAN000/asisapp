@@ -14,6 +14,7 @@ __pycache__/
 venv/
 .venv/
 .venv-pdf/
+.venv-audio/
 env/
 ENV/
 
@@ -26,20 +27,41 @@ ENV/
 *.swp
 *.swo
 
+# Asistentes de IA (config/historial local, no pertenece al repo)
+.claude/
+.aider*
+.cursor/
+.windsurf/
+
 # Misc
 *.local
-.aider*
 
 # Credenciales reales (usar .env.example como plantilla)
 .env
+.env.prod
 Asistencia-Backend/.env
 
-# Fotos capturadas por el software (biometria / evidencia de asistencia) - no se versionan
-Asistencia-Backend/uploads/faces/
-Asistencia-Backend/uploads/fotos/
+# Fotos y archivos subidos por el software (biometria / evidencia de asistencia) - no se versionan
+Asistencia-Backend/uploads/
 python-face-service/photos/
 python-face-service/temp/
 python-face-service/test_face2.jpg
 
 # Volcados de base de datos y scripts de trabajo con datos/credenciales reales
 backups/
+
+# Migraciones (se generan/aplican por ambiente, no se versionan)
+Asistencia-Backend/src/migrations/
+Asistencia-Backend/src/auth/migrations/
+
+# Scripts y datos de prueba ad-hoc (no forman parte del producto)
+audio_temp.wav
+transcripcion_audio.json
+transcribir_audio.py
+crear_documento_word.py
+crear_plantilla_registro_masivo.py
+preguntas_audio_respuestas.md
+Preguntas_Audio_Respuestas_AssisApp.docx
+plantilla_registro_masivo_chronogest.xlsx
+plantilla_registro_masivo_chronogest_corregida.xlsx
+plantilla_registro_masivo_chronogest_corregida*.xlsx

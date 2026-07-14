@@ -1642,8 +1642,15 @@ export class InstructorMisHorariosComponent implements OnInit, OnDestroy {
     if (h.activo) return false;
     if (h.motivoFinalizacion) return false;
 
-    // Solo se puede iniciar si es el día de hoy
+    // Solo se puede iniciar si es el día de hoy y todavía no pasó la hora de fin programada
+    // (coincide con la validación del backend en HorariosCGService.estaDentroDelHorario).
     if (!this.isToday(dia)) return false;
+    if (h?.horaFin) {
+      const [eh, em] = h.horaFin.split(':').map(Number);
+      const now = this.now();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      if (nowMin > eh * 60 + em) return false;
+    }
 
     // Transversal: necesita haber seleccionado un ambiente/ubicación primero.
     // También se acepta si ya hay un ambiente o ubicación persistida en DB (h.ambienteId o h.ubicacionTransversalId).

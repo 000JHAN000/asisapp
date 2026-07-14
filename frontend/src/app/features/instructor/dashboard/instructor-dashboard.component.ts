@@ -15,7 +15,7 @@ import { LucideAngularModule } from 'lucide-angular';
     <div class="welcome-banner">
       <div class="banner-text">
         <h2>¡Bienvenido, {{ user()?.nombre }}!</h2>
-        <p>Panel de Instructor — ChronoGest SENA</p>
+        <p>Panel de Instructor — AsisApp SENA</p>
         @if (user()?.esLider) {
         <span class="leader-badge">
           <lucide-icon name="star" [size]="12"></lucide-icon>

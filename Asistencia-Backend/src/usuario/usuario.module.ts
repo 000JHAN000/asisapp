@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsuarioOrmEntity }         from './infrastructure/entities/usuario.orm-entity';
 import { PersonaOrmEntity }         from 'src/persona/infrastructure/entities/persona.orm-entity';
+import { UsuarioMaestro }           from 'src/auth/infrastructure/entities/usuario-maestro.orm-entity';
 import { UsuarioTypeOrmRepository } from './infrastructure/adapters/usuario.typeorm.repository';
 import { UsuarioService }           from './application/usuario.service';
 import { UsuariosCGService }        from './application/usuarios-cg.service';
@@ -14,7 +15,7 @@ import { TenantModule }             from 'src/auth/infrastructure/persistence/te
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UsuarioOrmEntity, PersonaOrmEntity]),
+    TypeOrmModule.forFeature([UsuarioOrmEntity, PersonaOrmEntity, UsuarioMaestro]),
     TenantModule,
   ],
   controllers: [UsuarioController, UsuariosCGController],

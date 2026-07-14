@@ -1,15 +1,17 @@
-import { Component } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, OnDestroy, signal } from '@angular/core';
+import { RouterOutlet, RouterLink, RouterLinkActive, ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-dev-layout',
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <div class="dev-shell">
+      @if (!focusMode()) {
       <header class="dev-header">
         <div class="dev-header-left">
           <span class="dev-badge">DEV</span>
-          <span class="dev-title">ChronoGest — Área de Desarrollo</span>
+          <span class="dev-title">AsisApp — Área de Desarrollo</span>
         </div>
         <nav class="dev-nav">
           <a routerLink="/dev/formativo" routerLinkActive="active">Proyecto Formativo DB</a>
@@ -22,8 +24,9 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
         Esta sección es exclusiva para desarrolladores. Los cambios afectan directamente las bases de datos
         <strong>proyecto_formativo_db</strong> y <strong>horarios_db</strong>.
       </div>
+      }
 
-      <main class="dev-content">
+      <main class="dev-content" [class.dev-content-focus]="focusMode()">
         <router-outlet></router-outlet>
       </main>
     </div>
@@ -77,6 +80,26 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
       min-height: calc(100vh - 80px);
       border-radius: 0;
     }
+    .dev-content-focus {
+      min-height: 100vh;
+    }
   `],
 })
-export class DevLayoutComponent {}
+export class DevLayoutComponent implements OnDestroy {
+  /** Oculta la barra "DEV" y el aviso cuando se llega desde otra pantalla a crear/ver
+   *  un solo recurso puntual (ej. ?tab=areas&new=1) — solo se quiere el formulario,
+   *  no todo el panel de desarrollador alrededor. */
+  focusMode = signal(false);
+  private sub: Subscription;
+
+  constructor(route: ActivatedRoute) {
+    this.focusMode.set(route.snapshot.queryParamMap.has('tab'));
+    this.sub = route.queryParamMap.subscribe((params) => {
+      this.focusMode.set(params.has('tab'));
+    });
+  }
+
+  ngOnDestroy() {
+    this.sub?.unsubscribe();
+  }
+}

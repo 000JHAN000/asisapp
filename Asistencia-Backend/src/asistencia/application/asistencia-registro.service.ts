@@ -10,6 +10,7 @@ import { firstValueFrom } from 'rxjs';
 import { CreateAsistenciaRegistroDto } from '../infrastructure/http/dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from '../infrastructure/http/dto/marcar-falla.dto';
 import { VerificarRostroDto } from '../infrastructure/http/dto/verificar-rostro.dto';
+import { SolicitarJustificacionDto } from '../infrastructure/http/dto/solicitar-justificacion.dto';
 import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.orm-entity';
 import { getBaseFacePath, getAttendanceFacePath, readFileToBase64, saveAttendanceFace } from '../../infrastructure/utils/file-storage.util';
 import { getColombiaDate } from '../../infrastructure/utils/date.util';
@@ -178,6 +179,74 @@ export class AsistenciaRegistroService {
       estado: 'falla_justificada',
       nota: dto.nota || undefined,
       soporteUrl: dto.soporte || undefined,
+      horaRegistro: getColombiaDate(),
     });
+  }
+
+  /** El aprendiz sube su propia justificación (nota + soporte opcional) por no haber
+   *  firmado una sesión. Queda "pendiente" hasta que el instructor la apruebe o la
+   *  rechace — no se marca directamente como falla justificada. */
+  async solicitarJustificacion(dto: SolicitarJustificacionDto) {
+    const sesion = await this.sesionRepo.buscarPorId(dto.sesionId);
+    if (!sesion) throw new NotFoundException('Sesión no encontrada');
+
+    const existente = await this.registroRepo.buscarUno(dto.sesionId, dto.aprendizId);
+    if (existente) {
+      // Una falla no justificada (p. ej. el instructor le quitó una marca de "presente" falsa)
+      // sigue siendo justificable: el aprendiz puede enviar su explicación sobre ese registro.
+      if (existente.estado === 'falla_injustificada') {
+        existente.estado = 'justificacion_pendiente';
+        existente.nota = dto.nota;
+        existente.soporteUrl = dto.soporte || undefined;
+        return this.registroRepo.guardar(existente);
+      }
+      throw new ForbiddenException(
+        existente.estado === 'presente'
+          ? 'Ya registraste tu asistencia a esta sesión.'
+          : 'Ya enviaste una justificación para esta sesión.',
+      );
+    }
+
+    return this.registroRepo.crear({
+      sesionId: dto.sesionId,
+      aprendizId: dto.aprendizId,
+      estado: 'justificacion_pendiente',
+      nota: dto.nota,
+      soporteUrl: dto.soporte || undefined,
+      horaRegistro: getColombiaDate(),
+    });
+  }
+
+  /** El instructor/admin revisa una justificación enviada por el aprendiz: si la aprueba
+   *  queda como falla justificada; si la rechaza, se elimina el registro y el aprendiz
+   *  vuelve a quedar "pendiente" (como si nunca hubiera enviado nada). */
+  async resolverJustificacion(registroId: string, aprobar: boolean) {
+    const registro = await this.registroRepo.buscarPorId(registroId);
+    if (!registro) throw new NotFoundException('Justificación no encontrada');
+    if (registro.estado !== 'justificacion_pendiente') {
+      throw new ForbiddenException('Este registro no es una justificación pendiente de revisión.');
+    }
+
+    if (!aprobar) {
+      await this.registroRepo.eliminar(registroId);
+      return { success: true, aprobada: false };
+    }
+
+    registro.estado = 'falla_justificada';
+    const guardado = await this.registroRepo.guardar(registro);
+    return { success: true, aprobada: true, registro: guardado };
+  }
+
+  /** El instructor quita la marca de "presente" de un aprendiz que en realidad no asistió
+   *  (p. ej. firmó pero no llegó a clase). El registro queda como falla no justificada
+   *  en vez de eliminarse, para que quede constancia de la inasistencia real. */
+  async quitarAsistencia(registroId: string) {
+    const registro = await this.registroRepo.buscarPorId(registroId);
+    if (!registro) throw new NotFoundException('Registro no encontrado');
+    if (registro.estado !== 'presente') {
+      throw new ForbiddenException('Solo se puede quitar un registro marcado como presente.');
+    }
+    registro.estado = 'falla_injustificada';
+    return this.registroRepo.guardar(registro);
   }
 }

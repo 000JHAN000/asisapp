@@ -1,0 +1,186 @@
+# ============================================================
+#  ChronoGest - Docker Compose Producción
+#  NestJS + Angular (nginx) + Python FastAPI + PostgreSQL + Redis
+# ============================================================
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d
+# Requiere archivo .env con las variables de producción.
+# ============================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chronogest_db_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sena_db}
+    # No se exponen puertos al exterior en producción
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # En producción los scripts de inicialización se ejecutan manualmente
+      # o se montan desde un volumen de configuración gestionado
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - chronogest_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: chronogest_redis_prod
+    restart: always
+    # No se exponen puertos al exterior en producción
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - chronogest_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  backend:
+    image: ${REGISTRY:-docker.io}/${IMAGE_PREFIX:-chronogest}/backend:${TAG:-latest}
+    container_name: chronogest_backend_prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TZ: America/Bogota
+      # Base de datos maestra
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-sena_db}
+      # Base de datos secundaria (legacy)
+      DB2_HOST: db
+      DB2_PORT: 5432
+      DB2_USER: ${POSTGRES_USER:-postgres}
+      DB2_PASSWORD: ${POSTGRES_PASSWORD}
+      DB2_NAME: ${DB2_NAME:-proyecto_formativo_db}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Tenant DB config
+      TENANT_DB_USER: ${POSTGRES_USER:-postgres}
+      TENANT_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      TENANT_MAX_POOLS: ${TENANT_MAX_POOLS:-20}
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      # Email
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      # CORS / URLs
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://chronogest.example.com}
+      # Face service
+      FACE_SERVICE_URL: http://face-service:5000
+      # Uploads
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      face-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - chronogest_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  face-service:
+    image: ${REGISTRY:-docker.io}/${IMAGE_PREFIX:-chronogest}/face-service:${TAG:-latest}
+    container_name: chronogest_face_service_prod
+    restart: always
+    environment:
+      TZ: America/Bogota
+      # Variables adicionales si el servicio las requiere
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - face_photos:/app/photos
+      - deepface_models:/root/.deepface
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - chronogest_net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  frontend:
+    image: ${REGISTRY:-docker.io}/${IMAGE_PREFIX:-chronogest}/frontend:${TAG:-latest}
+    container_name: chronogest_frontend_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Nginx no necesita muchas variables, pero puede usarse para
+      # configuración dinámica si se usa envsubst en entrypoint
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx/conf.d
+    volumes:
+      # Volumen para certificados SSL (opcional, para HTTPS)
+      - certs_data:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_started
+      face-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - chronogest_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  chronogest_net:
+    driver: bridge
+    internal: false  # El frontend necesita exponer 80/443
+
+volumes:
+  db_data:
+  uploads_data:
+  redis_data:
+  face_photos:
+  deepface_models:
+  certs_data:

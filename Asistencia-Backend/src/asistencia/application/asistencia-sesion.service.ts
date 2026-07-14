@@ -16,6 +16,7 @@ import type { AsistenciaSesionRepositoryPort } from '../domain/ports/asistencia-
 import { ASISTENCIA_REGISTRO_REPOSITORY } from '../domain/ports/asistencia-registro.repository.port';
 import type { AsistenciaRegistroRepositoryPort } from '../domain/ports/asistencia-registro.repository.port';
 import type { AsistenciaRegistro } from '../domain/entities/asistencia-registro.entity';
+import type { AsistenciaSesion } from '../domain/entities/asistencia-sesion.entity';
 
 @Injectable()
 export class AsistenciaSesionService {
@@ -66,14 +67,28 @@ export class AsistenciaSesionService {
     }
 
     // Cierra automáticamente cualquier otra sesión que el instructor haya dejado activa
-    // (p. ej. olvidó cerrar la de la mañana antes de iniciar la de la tarde).
+    // (p. ej. olvidó cerrar la de la mañana antes de iniciar la de la tarde), y apaga el
+    // "activo" del horario correspondiente para que "Mis Horarios" del aprendiz deje de
+    // mostrarla como en curso.
+    const sesionesPrevias = await this.sesionRepo.buscarActivasPorInstructor(instructorId);
     await this.sesionRepo.cerrarActivasDeInstructor(instructorId);
+    if (sesionesPrevias.length) {
+      await horarioRepo.update(
+        { id_horario: In(sesionesPrevias.map((s) => s.horarioId)) },
+        { activo: false },
+      );
+    }
 
-    return this.sesionRepo.crear({
+    const sesion = await this.sesionRepo.crear({
       ...dto,
       instructorId,
       estado: 'activa',
     });
+
+    // "Mis Horarios" del aprendiz lee horario.activo para saber si la clase está en curso.
+    await horarioRepo.update({ id_horario: dto.horarioId }, { activo: true });
+
+    return sesion;
   }
 
   private async enrichRegistros(registros: AsistenciaRegistro[]) {
@@ -121,9 +136,29 @@ export class AsistenciaSesionService {
     return { ...sesion, registros: enrichedRegistros };
   }
 
+  /** Una sesión "activa" cuya hora de fin ya pasó se cierra sola al consultarla —
+   *  de lo contrario se queda "En curso" indefinidamente hasta que el instructor
+   *  recuerde presionar "Finalizar Clases" manualmente. */
+  private esVencida(sesion: { estado: string; fecha: string; horaFin: string }): boolean {
+    if (sesion.estado !== 'activa') return false;
+    const finDatetime = new Date(`${sesion.fecha}T${sesion.horaFin}-05:00`);
+    return getColombiaDate() > finDatetime;
+  }
+
+  private async autoCerrarSiVencida(sesion: AsistenciaSesion): Promise<AsistenciaSesion> {
+    if (!this.esVencida(sesion)) return sesion;
+    sesion.estado = 'cerrada';
+    const cerrada = await this.sesionRepo.guardar(sesion);
+    const horarioRepo = await this.getHorarioRepo();
+    await horarioRepo.update({ id_horario: sesion.horarioId }, { activo: false });
+    return cerrada;
+  }
+
   async findActivaByHorario(horarioId: string) {
-    const sesion = await this.sesionRepo.buscarActivaPorHorario(horarioId);
+    let sesion = await this.sesionRepo.buscarActivaPorHorario(horarioId);
     if (!sesion) return null;
+    sesion = await this.autoCerrarSiVencida(sesion);
+    if (sesion.estado !== 'activa') return null;
     const registros = await this.registroRepo.buscarPorSesion(sesion.id);
     const enrichedRegistros = await this.enrichRegistros(registros);
     return { ...sesion, registros: enrichedRegistros };
@@ -132,7 +167,9 @@ export class AsistenciaSesionService {
   async findActivasByInstructor(instructorId: string) {
     const sesiones = await this.sesionRepo.buscarActivasPorInstructor(instructorId);
     const result: any[] = [];
-    for (const sesion of sesiones) {
+    for (let sesion of sesiones) {
+      sesion = await this.autoCerrarSiVencida(sesion);
+      if (sesion.estado !== 'activa') continue;
       const registros = await this.registroRepo.buscarPorSesion(sesion.id);
       const enrichedRegistros = await this.enrichRegistros(registros);
       result.push({ ...sesion, registros: enrichedRegistros });
@@ -145,8 +182,10 @@ export class AsistenciaSesionService {
     const horarios = await horarioRepo.find({ where: { curso_fk: fichaId } });
     const horarioIds = horarios.map((h) => h.id_horario);
 
-    const sesion = await this.sesionRepo.buscarActivaPorHorarioIds(horarioIds);
+    let sesion = await this.sesionRepo.buscarActivaPorHorarioIds(horarioIds);
     if (!sesion) return null;
+    sesion = await this.autoCerrarSiVencida(sesion);
+    if (sesion.estado !== 'activa') return null;
     const registros = await this.registroRepo.buscarPorSesion(sesion.id);
     const enrichedRegistros = await this.enrichRegistros(registros);
     return { ...sesion, registros: enrichedRegistros };
@@ -156,7 +195,12 @@ export class AsistenciaSesionService {
     const sesion = await this.sesionRepo.buscarPorId(id);
     if (!sesion) throw new NotFoundException('Sesión no encontrada');
     sesion.estado = 'cerrada';
-    return this.sesionRepo.guardar(sesion);
+    const guardada = await this.sesionRepo.guardar(sesion);
+
+    const horarioRepo = await this.getHorarioRepo();
+    await horarioRepo.update({ id_horario: sesion.horarioId }, { activo: false });
+
+    return guardada;
   }
 
   /** Historial de sesiones para el panel de admin, filtrable por fecha, ficha e instructor.
@@ -231,6 +275,159 @@ export class AsistenciaSesionService {
         registros: registrosPorSesion.get(s.id) ?? [],
       };
     });
+  }
+
+  /** Últimas sesiones (cerradas o activas) de la ficha del aprendiz, con su propio registro
+   *  (si existe) embebido — usada para que el aprendiz pueda ver clases donde no marcó
+   *  asistencia y solicitar una justificación. */
+  async misSesionesRecientes(fichaId: string, aprendizId: string) {
+    const horarioRepo = await this.getHorarioRepo();
+    const horarios = await horarioRepo.find({ where: { curso_fk: fichaId } });
+    if (!horarios.length) return [];
+    const horarioIds = horarios.map((h) => h.id_horario);
+
+    const sesiones = await this.sesionRepo.buscarPorFiltros({ horarioIds });
+    const recientes = sesiones.slice(0, 30);
+
+    return Promise.all(
+      recientes.map(async (s) => {
+        const miRegistro = await this.registroRepo.buscarUno(s.id, aprendizId);
+        return {
+          id: s.id,
+          fecha: s.fecha,
+          horaInicio: s.horaInicio,
+          horaFin: s.horaFin,
+          estado: s.estado,
+          miRegistro: miRegistro ? { estado: miRegistro.estado, nota: miRegistro.nota } : null,
+        };
+      }),
+    );
+  }
+
+  /** Consulta usada por el bot (n8n): recibe un identificador que puede ser el
+   *  perfilId (uuid) del aprendiz, su documento o su teléfono, y devuelve un
+   *  resumen de su asistencia (estado de hoy + resumen del mes actual). */
+  async consultarPorIdentificador(identificador: string) {
+    const personaRepo = await this.getPersonaRepo();
+    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identificador);
+
+    const persona = await personaRepo.findOne({
+      where: esUuid
+        ? { id_persona: identificador }
+        : [{ documento: identificador }, { telefono: identificador }],
+      relations: ['matriculas'],
+    });
+    if (!persona) return { encontrado: false };
+
+    const fichaId = persona.matriculas?.[0]?.curso_fk;
+    const base = {
+      encontrado: true as const,
+      nombre: persona.nombres,
+      apellido: persona.apellidos,
+      documento: persona.documento,
+    };
+    if (!fichaId) {
+      return { ...base, ficha: null, estadoHoy: 'sin_ficha', resumenMes: null };
+    }
+
+    const cursoRepo = await this.connectionManager.getTenantRepository(this.tenantId, CursoOrmEntity);
+    const curso = await cursoRepo.findOne({ where: { id_curso: fichaId }, relations: ['programa'] });
+
+    const horarioRepo = await this.getHorarioRepo();
+    const horarios = await horarioRepo.find({ where: { curso_fk: fichaId } });
+    const horarioIds = horarios.map((h) => h.id_horario);
+
+    let estadoHoy = 'sin_clase_hoy';
+    if (horarioIds.length) {
+      const hoy = getColombiaDateString();
+      const sesionesHoy = await this.sesionRepo.buscarPorFiltros({ fecha: hoy, horarioIds });
+      if (sesionesHoy.length) {
+        const registro = await this.registroRepo.buscarUno(sesionesHoy[0].id, persona.id_persona);
+        estadoHoy = registro?.estado ?? 'pendiente';
+      }
+    }
+
+    let resumenMes: { totalSesiones: number; presentes: number; ausencias: number; justificadas: number; porcentaje: number } | null = null;
+    if (horarioIds.length) {
+      const ahora = getColombiaDate();
+      const anio = ahora.getFullYear();
+      const mes = ahora.getMonth() + 1;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const ultimoDia = new Date(anio, mes, 0).getDate();
+      const sesionesMes = await this.sesionRepo.buscarPorHorarioIdsYRangoFecha(
+        horarioIds,
+        `${anio}-${pad(mes)}-01`,
+        `${anio}-${pad(mes)}-${pad(ultimoDia)}`,
+      );
+      let presentes = 0, justificadas = 0, ausencias = 0;
+      for (const s of sesionesMes) {
+        const r = await this.registroRepo.buscarUno(s.id, persona.id_persona);
+        if (r?.estado === 'presente') presentes++;
+        else if (r?.estado === 'falla_justificada') justificadas++;
+        else ausencias++;
+      }
+      const total = sesionesMes.length;
+      resumenMes = {
+        totalSesiones: total,
+        presentes,
+        ausencias,
+        justificadas,
+        porcentaje: total > 0 ? Math.round((presentes / total) * 100) : 0,
+      };
+    }
+
+    return {
+      ...base,
+      ficha: curso ? { codigo: curso.codigo, programa: curso.programa?.nombre ?? '' } : null,
+      estadoHoy,
+      resumenMes,
+    };
+  }
+
+  /** Horario semanal del aprendiz (para el bot: "¿qué clases tengo?"). Usa el mismo
+   *  identificador flexible (perfilId/documento/teléfono) que consultarPorIdentificador. */
+  async consultarHorarioPorIdentificador(identificador: string) {
+    const personaRepo = await this.getPersonaRepo();
+    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identificador);
+
+    const persona = await personaRepo.findOne({
+      where: esUuid
+        ? { id_persona: identificador }
+        : [{ documento: identificador }, { telefono: identificador }],
+      relations: ['matriculas'],
+    });
+    if (!persona) return { encontrado: false };
+
+    const fichaId = persona.matriculas?.[0]?.curso_fk;
+    if (!fichaId) {
+      return { encontrado: true, nombre: persona.nombres, ficha: null, horarios: [] };
+    }
+
+    const cursoRepo = await this.connectionManager.getTenantRepository(this.tenantId, CursoOrmEntity);
+    const curso = await cursoRepo.findOne({ where: { id_curso: fichaId }, relations: ['programa'] });
+
+    const horarioRepo = await this.getHorarioRepo();
+    const horarios = await horarioRepo.find({
+      where: { curso_fk: fichaId },
+      relations: ['instructor', 'instructor.persona', 'ambiente'],
+    });
+
+    const orden = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+    const ordenados = [...horarios].sort((a, b) => orden.indexOf(a.diaSemana ?? '') - orden.indexOf(b.diaSemana ?? ''));
+
+    return {
+      encontrado: true,
+      nombre: persona.nombres,
+      ficha: curso ? { codigo: curso.codigo, programa: curso.programa?.nombre ?? '' } : null,
+      horarios: ordenados.map((h) => ({
+        diaSemana: h.diaSemana,
+        horaInicio: h.hora_inicio,
+        horaFin: h.hora_fin,
+        jornada: h.jornada,
+        instructor: h.instructor ? `${h.instructor.persona?.nombres ?? ''} ${h.instructor.persona?.apellidos ?? ''}`.trim() : null,
+        ambiente: h.ambiente?.nombre ?? null,
+      })),
+    };
   }
 
   async getPendientes(sesionId: string) {

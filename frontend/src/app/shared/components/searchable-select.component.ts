@@ -4,6 +4,7 @@ import {
   signal, computed,
 } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
 
 export interface SSOption {
@@ -23,7 +24,7 @@ export interface SSOption {
 @Component({
   selector: 'app-ss',
   standalone: true,
-  imports: [FormsModule, LucideAngularModule],
+  imports: [FormsModule, LucideAngularModule, RouterLink],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -63,7 +64,7 @@ export interface SSOption {
         <!-- Options list -->
         <ul class="ss-list" role="listbox" [style.max-height.px]="_panelPos()!.maxH">
           @if (_filteredOptions().length === 0) {
-            <li class="ss-empty">Sin resultados</li>
+            <li class="ss-empty">{{ emptyMessage }}</li>
           }
           @for (opt of _filteredOptions(); track opt.value) {
             <li class="ss-option"
@@ -85,6 +86,16 @@ export interface SSOption {
             </li>
           }
         </ul>
+
+        <!-- Pie fijo: siempre disponible, no solo cuando la lista está vacía,
+             para poder seguir agregando más aunque ya existan opciones. -->
+        @if (emptyLink) {
+          <a [routerLink]="emptyLink" [queryParams]="emptyLinkQueryParams"
+             class="ss-create-footer" (mousedown)="$event.preventDefault()" (click)="close()">
+            <lucide-icon name="plus" [size]="13"></lucide-icon>
+            {{ emptyLinkText }}
+          </a>
+        }
       </div>
       }
     </div>
@@ -241,12 +252,33 @@ export interface SSOption {
       color: var(--text-muted);
       font-size: 12px;
     }
+    .ss-create-footer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      color: var(--blue);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .ss-create-footer:hover {
+      background: #eff6ff;
+    }
   `],
 })
 export class SearchableSelectComponent implements ControlValueAccessor, OnChanges {
   // ── Inputs ────────────────────────────────────────────────────────
   @Input() set options(v: SSOption[]) { this._options.set(v ?? []); }
   @Input() placeholder = 'Seleccionar...';
+  @Input() emptyMessage = 'Sin resultados';
+  /** Ruta opcional (routerLink) para un link de "crear aquí" cuando no hay opciones. */
+  @Input() emptyLink?: string;
+  @Input() emptyLinkQueryParams?: Record<string, string>;
+  @Input() emptyLinkText = 'Crear aquí';
 
   // ── Internal signals (all reactive) ──────────────────────────────
   _options  = signal<SSOption[]>([]);

@@ -1,4 +1,4 @@
-export type EstadoRegistro = 'presente' | 'falla_justificada';
+export type EstadoRegistro = 'presente' | 'falla_justificada' | 'justificacion_pendiente' | 'falla_injustificada';
 
 export class AsistenciaRegistro {
   id: string;

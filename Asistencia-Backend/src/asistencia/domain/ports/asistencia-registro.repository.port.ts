@@ -6,6 +6,8 @@ export interface AsistenciaRegistroRepositoryPort {
   buscarPorSesion(sesionId: string): Promise<AsistenciaRegistro[]>;
   buscarPorSesiones(sesionIds: string[]): Promise<AsistenciaRegistro[]>;
   buscarUno(sesionId: string, aprendizId?: string): Promise<AsistenciaRegistro | null>;
+  buscarPorId(id: string): Promise<AsistenciaRegistro | null>;
   crear(datos: Partial<AsistenciaRegistro>): Promise<AsistenciaRegistro>;
   guardar(registro: AsistenciaRegistro): Promise<AsistenciaRegistro>;
+  eliminar(id: string): Promise<void>;
 }

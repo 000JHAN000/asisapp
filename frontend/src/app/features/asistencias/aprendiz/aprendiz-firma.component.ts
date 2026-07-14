@@ -1,7 +1,9 @@
 import { Component, OnInit, signal, viewChild, ElementRef, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { AsistenciaService } from '../../../core/services/asistencia/asistencia.service';
+import { ApiService } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { FaceCaptureComponent } from '../../../shared/components/face-capture.component';
@@ -10,7 +12,7 @@ import { LucideAngularModule } from 'lucide-angular';
 
 @Component({
   selector: 'app-aprendiz-firma',
-  imports: [LucideAngularModule, FaceCaptureComponent],
+  imports: [LucideAngularModule, FaceCaptureComponent, FormsModule],
   template: `
     <div class="page-header">
       <div>
@@ -25,6 +27,78 @@ import { LucideAngularModule } from 'lucide-angular';
         <h3>No hay sesión activa</h3>
         <p class="text-muted text-sm">Tu instructor aún no ha iniciado la asistencia para tu ficha. Vuelve más tarde.</p>
       </div>
+
+      <!-- Clases recientes sin marcar: permite solicitar justificación -->
+      <div class="card mt-3">
+        <h4 class="section-subtitle">Mis clases recientes</h4>
+        @if (misSesiones().length === 0) {
+          <p class="text-muted text-sm mt-2">No hay clases registradas todavía.</p>
+        } @else {
+          <div class="mis-sesiones-list mt-2">
+            @for (s of misSesiones(); track s.id) {
+              <div class="sesion-row">
+                <div class="sesion-info">
+                  <span class="sesion-fecha">{{ s.fecha }}</span>
+                  <span class="sesion-hora">{{ s.horaInicio }} — {{ s.horaFin }}</span>
+                </div>
+                @if (s.miRegistro?.estado === 'presente') {
+                  <span class="badge presente">Presente</span>
+                } @else if (s.miRegistro?.estado === 'falla_justificada') {
+                  <span class="badge falla">Falla Just.</span>
+                } @else if (s.miRegistro?.estado === 'justificacion_pendiente') {
+                  <span class="badge pendiente">Justificación pendiente</span>
+                } @else if (s.estado === 'activa') {
+                  <span class="badge pendiente">En curso</span>
+                } @else if (s.miRegistro?.estado === 'falla_injustificada') {
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="badge falla-injustificada">Falla No Just.</span>
+                    <button class="btn btn-outline btn-sm" (click)="abrirJustificacion(s)">
+                      <lucide-icon name="file-plus" [size]="12"></lucide-icon> Justificar
+                    </button>
+                  </div>
+                } @else {
+                  <button class="btn btn-outline btn-sm" (click)="abrirJustificacion(s)">
+                    <lucide-icon name="file-plus" [size]="12"></lucide-icon> Justificar
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      @if (justificarSesion()) {
+        <div class="modal-overlay" (click)="cerrarJustificacion()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Justificar inasistencia</h3>
+              <button class="btn-icon" (click)="cerrarJustificacion()"><lucide-icon name="x" [size]="18"></lucide-icon></button>
+            </div>
+            <p class="text-muted text-sm">{{ justificarSesion()?.fecha }} — {{ justificarSesion()?.horaInicio }} a {{ justificarSesion()?.horaFin }}</p>
+            <div class="form-group mt-3">
+              <label class="form-label">Motivo</label>
+              <textarea class="form-control" rows="3" [(ngModel)]="justificacionNota" placeholder="Explica por qué no marcaste asistencia..."></textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label">Soporte (opcional)</label>
+              <input type="file" (change)="onJustificacionSoporte($event)">
+              @if (justificacionSoporteUrl) {
+                <p class="text-sm text-muted mt-1">Archivo adjuntado correctamente</p>
+              }
+            </div>
+            <div class="btn-row mt-4">
+              <button class="btn btn-outline" (click)="cerrarJustificacion()">Cancelar</button>
+              <button class="btn btn-blue" [disabled]="!justificacionNota.trim() || enviandoJustificacion()" (click)="enviarJustificacion()">
+                @if (enviandoJustificacion()) {
+                  <lucide-icon name="loader" [size]="14" class="spin"></lucide-icon> Enviando...
+                } @else {
+                  Enviar solicitud
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     } @else if (yaFirmo()) {
       <div class="card mt-4 success-card">
         <lucide-icon name="check-circle" [size]="40" style="color:#16a34a"></lucide-icon>
@@ -174,6 +248,23 @@ import { LucideAngularModule } from 'lucide-angular';
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .section-subtitle { font-size: .95rem; font-weight: 700; color: var(--text); margin: 0; }
+    .mis-sesiones-list { display: flex; flex-direction: column; gap: 8px; }
+    .sesion-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; }
+    .sesion-info { display: flex; flex-direction: column; gap: 2px; }
+    .sesion-fecha { font-weight: 700; font-size: 13px; color: var(--text); }
+    .sesion-hora { font-size: 12px; color: var(--text-muted); }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .badge.presente { background: #dcfce7; color: #166534; }
+    .badge.falla { background: #fee2e2; color: #991b1b; }
+    .badge.pendiente { background: #fef3c7; color: #92400e; }
+    .badge.falla-injustificada { background: #fecaca; color: #7f1d1d; }
+    .modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-lg); width: 100%; max-width: 480px; padding: 20px; max-height: 90vh; overflow: auto; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .btn-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   `],
 })
 export class AprendizFirmaComponent implements OnInit, OnDestroy {
@@ -188,6 +279,12 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
   enviando = signal(false);
   clientIP = signal<string | null>(null);
 
+  misSesiones = signal<any[]>([]);
+  justificarSesion = signal<any>(null);
+  justificacionNota = '';
+  justificacionSoporteUrl = '';
+  enviandoJustificacion = signal(false);
+
   private ctx: CanvasRenderingContext2D | null = null;
   private isDrawing = false;
   private lastX = 0;
@@ -198,6 +295,7 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
     private auth: AuthService,
     private toast: ToastService,
     private http: HttpClient,
+    private api: ApiService,
     public router: Router,
   ) {}
 
@@ -228,9 +326,11 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
         if (sesion) {
           const miRegistro = sesion.registros?.find((r: any) => r.aprendizId === this.auth.currentUser()?.perfilId);
           this.yaFirmo.set(!!miRegistro);
+        } else {
+          this.cargarMisSesiones();
         }
       },
-      error: () => {},
+      error: () => this.cargarMisSesiones(),
     });
 
     this.http.get<{ hasFace: boolean }>('http://127.0.0.1:3001/api/aprendices/me/face-status')
@@ -406,6 +506,56 @@ export class AprendizFirmaComponent implements OnInit, OnDestroy {
         this.enviando.set(false);
         console.error('[FIRMA] Error:', err);
         this.toast.error(err.error?.message || 'Error al confirmar asistencia');
+      },
+    });
+  }
+
+  cargarMisSesiones() {
+    const fichaId = this.auth.currentUser()?.fichaId;
+    if (!fichaId) return;
+    this.asistencia.getMisSesiones(fichaId).subscribe({
+      next: (list: any) => this.misSesiones.set(list ?? []),
+      error: () => {},
+    });
+  }
+
+  abrirJustificacion(sesion: any) {
+    this.justificarSesion.set(sesion);
+    this.justificacionNota = '';
+    this.justificacionSoporteUrl = '';
+  }
+
+  cerrarJustificacion() {
+    this.justificarSesion.set(null);
+  }
+
+  onJustificacionSoporte(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+    if (!file) return;
+    this.api.uploadAdjunto(file).subscribe({
+      next: (res: any) => { this.justificacionSoporteUrl = res.url; },
+      error: () => this.toast.error('Error al subir el soporte'),
+    });
+  }
+
+  enviarJustificacion() {
+    const sesion = this.justificarSesion();
+    if (!sesion || !this.justificacionNota.trim()) return;
+    this.enviandoJustificacion.set(true);
+    this.asistencia.solicitarJustificacion({
+      sesionId: sesion.id,
+      nota: this.justificacionNota,
+      soporte: this.justificacionSoporteUrl || undefined,
+    }).subscribe({
+      next: () => {
+        this.enviandoJustificacion.set(false);
+        this.toast.success('Solicitud de justificación enviada. Tu instructor la revisará.');
+        this.cerrarJustificacion();
+        this.cargarMisSesiones();
+      },
+      error: (err: any) => {
+        this.enviandoJustificacion.set(false);
+        this.toast.error(err.error?.message || 'Error al enviar la justificación');
       },
     });
   }

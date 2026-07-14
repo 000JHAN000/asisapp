@@ -35,6 +35,8 @@ import { HorarioModule }       from './horario/horario.module';
 import { TenantModule }          from './auth/infrastructure/persistence/tenants/tenant.module';
 import { TenantMiddleware }      from './infrastructure/middleware/tenant.middleware';
 import { SuperAdminModule }      from './super-admin/super-admin.module';
+import { BotModule }             from './bot/bot.module';
+import { RegistroMasivoModule }  from './admin/registro-masivo/registro-masivo.module';
 
 @Module({
   imports: [
@@ -110,6 +112,8 @@ import { SuperAdminModule }      from './super-admin/super-admin.module';
     QueuesModule,
     TenantModule,
     SuperAdminModule,
+    BotModule,
+    RegistroMasivoModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtGuard       },

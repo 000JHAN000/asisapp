@@ -51,4 +51,14 @@ export class AsistenciaRegistroTypeOrmRepository implements AsistenciaRegistroRe
     const repo = await this.repo();
     return repo.save(registro as any);
   }
+
+  async buscarPorId(id: string): Promise<AsistenciaRegistro | null> {
+    const repo = await this.repo();
+    return repo.findOne({ where: { id } });
+  }
+
+  async eliminar(id: string): Promise<void> {
+    const repo = await this.repo();
+    await repo.delete({ id });
+  }
 }

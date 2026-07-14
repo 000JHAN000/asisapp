@@ -14,7 +14,7 @@ import { LucideAngularModule } from 'lucide-angular';
     <div class="welcome-banner">
       <div class="banner-text">
         <h2>¡Bienvenido, {{ user()?.nombre }}!</h2>
-        <p>Panel de Aprendiz — ChronoGest SENA</p>
+        <p>Panel de Aprendiz — AsisApp SENA</p>
       </div>
       <lucide-icon name="graduation-cap" [size]="48" class="banner-icon"></lucide-icon>
     </div>

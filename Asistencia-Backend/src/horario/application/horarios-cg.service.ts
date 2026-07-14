@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import { HorarioOrmEntity } from 'src/horario/infrastructure/entities/horario.orm-entity';
 import { TenantConnectionManager } from 'src/auth/infrastructure/persistence/tenants/tenant-connection.manager';
 import { getCurrentTenantId } from '../../infrastructure/config/tenant-context';
+import { getColombiaDate } from '../../infrastructure/utils/date.util';
 
 @Injectable()
 export class HorariosCGService {
@@ -17,8 +19,32 @@ export class HorariosCGService {
     return tenantId;
   }
 
+  /** Instructor/ambiente se necesitan para mostrar nombre en Mis Horarios (aprendiz/instructor),
+   *  no solo el id — sin esta relación cargada esos campos quedan en blanco en pantalla. */
+  private static readonly RELATIONS = ['instructor', 'instructor.persona', 'ambiente'];
+
   private async getRepo() {
     return this.connectionManager.getTenantRepository(this.tenantId, HorarioOrmEntity);
+  }
+
+  /** Si el horario quedó marcado "activo" (clase en curso) pero ya pasó su hora de fin,
+   *  se corrige aquí mismo al consultarlo — de lo contrario "Mis Horarios" seguiría
+   *  mostrando "En curso" indefinidamente hasta que alguien presione "Finalizar Clases". */
+  private async autoFinalizarVencidos(items: HorarioOrmEntity[]): Promise<void> {
+    const ahora = getColombiaDate();
+    const horaActual = ahora.toTimeString().slice(0, 8); // "HH:MM:SS"
+    const vencidos = items.filter((h) => h.activo && h.hora_fin < horaActual);
+    if (!vencidos.length) return;
+
+    const repo = await this.getRepo();
+    await repo.update(
+      { id_horario: In(vencidos.map((h) => h.id_horario)) },
+      { activo: false, estado: 'finalizado' },
+    );
+    for (const h of vencidos) {
+      h.activo = false;
+      h.estado = 'finalizado';
+    }
   }
 
   private mapToDto(h: HorarioOrmEntity) {
@@ -35,6 +61,10 @@ export class HorariosCGService {
       estado: h.estado,
       minutosRetraso: h.minutos_retraso,
       ubicacionTransversalNombre: h.ubicacion_transversal_nombre,
+      instructor: h.instructor
+        ? { id: h.instructor.id_instructor, nombre: h.instructor.persona?.nombres, apellido: h.instructor.persona?.apellidos }
+        : null,
+      ambiente: h.ambiente ? { id: h.ambiente.id_ambiente, nombre: h.ambiente.nombre } : null,
     };
   }
 
@@ -57,14 +87,17 @@ export class HorariosCGService {
 
   async findAll() {
     const repo = await this.getRepo();
-    const items = await repo.find();
+    const items = await repo.find({ relations: HorariosCGService.RELATIONS });
+    await this.autoFinalizarVencidos(items);
     return items.map((h) => this.mapToDto(h));
   }
 
   async findOne(id: string) {
     const repo = await this.getRepo();
-    const item = await repo.findOne({ where: { id_horario: id } });
-    return item ? this.mapToDto(item) : null;
+    const item = await repo.findOne({ where: { id_horario: id }, relations: HorariosCGService.RELATIONS });
+    if (!item) return null;
+    await this.autoFinalizarVencidos([item]);
+    return this.mapToDto(item);
   }
 
   private async createOne(data: any) {
@@ -95,24 +128,38 @@ export class HorariosCGService {
     const repo = await this.getRepo();
     const entity = await repo.findOne({ where: { id_horario: id } });
     if (!entity) throw new NotFoundException('Horario no encontrado');
-    return repo.remove(entity);
+    try {
+      return await repo.remove(entity);
+    } catch (error: any) {
+      // 23503 = violación de llave foránea (ej. ya tiene sesiones de asistencia,
+      // competencias o solicitudes de cambio registradas contra este horario).
+      if (error?.code === '23503') {
+        throw new BadRequestException(
+          'No se puede eliminar este horario porque ya tiene asistencia, competencias o solicitudes registradas. Puedes desactivarlo en su lugar.',
+        );
+      }
+      throw error;
+    }
   }
 
   async findByInstructor(instructorId: string) {
     const repo = await this.getRepo();
-    const items = await repo.find({ where: { instructor_fk: instructorId } });
+    const items = await repo.find({ where: { instructor_fk: instructorId }, relations: HorariosCGService.RELATIONS });
+    await this.autoFinalizarVencidos(items);
     return items.map((h) => this.mapToDto(h));
   }
 
   async findByFicha(fichaId: string) {
     const repo = await this.getRepo();
-    const items = await repo.find({ where: { curso_fk: fichaId } });
+    const items = await repo.find({ where: { curso_fk: fichaId }, relations: HorariosCGService.RELATIONS });
+    await this.autoFinalizarVencidos(items);
     return items.map((h) => this.mapToDto(h));
   }
 
   async findByAmbiente(ambienteId: string) {
     const repo = await this.getRepo();
-    const items = await repo.find({ where: { ambiente_fk: ambienteId } });
+    const items = await repo.find({ where: { ambiente_fk: ambienteId }, relations: HorariosCGService.RELATIONS });
+    await this.autoFinalizarVencidos(items);
     return items.map((h) => this.mapToDto(h));
   }
 
@@ -129,8 +176,11 @@ export class HorariosCGService {
   /** Sólo se puede iniciar el día correspondiente. */
   private estaDentroDelHorario(horario: HorarioOrmEntity): boolean {
     const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-    const now = new Date();
-    if (horario.diaSemana && horario.diaSemana !== dias[now.getDay()]) return false;
+    const ahora = getColombiaDate();
+    if (horario.diaSemana && horario.diaSemana !== dias[ahora.getDay()]) return false;
+
+    const horaActual = ahora.toTimeString().slice(0, 8); // "HH:MM:SS"
+    if (horaActual > horario.hora_fin) return false;
 
     return true;
   }

@@ -3,7 +3,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AmbienteOrmEntity }          from './infrastructure/entities/ambiente.orm-entity';
-import { AmbienteCG }                 from './infrastructure/entities/ambiente-cg.orm-entity';
 import { AmbienteTypeOrmRepository }  from './infrastructure/adapters/ambiente.typeorm.repository';
 import { AmbienteService }            from './application/ambiente.service';
 import { AmbientesCGService }         from './application/ambientes-cg.service';
@@ -14,7 +13,7 @@ import { TenantModule }               from 'src/auth/infrastructure/persistence/
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AmbienteOrmEntity, AmbienteCG]),
+    TypeOrmModule.forFeature([AmbienteOrmEntity]),
     TenantModule,
   ],
   controllers: [AmbienteController, AmbientesCGController],

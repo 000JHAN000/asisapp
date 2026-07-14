@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { PersonaOrmEntity } from '../../../../persona/infrastructure/entities/persona.orm-entity';
 
-export type EstadoRegistro = 'presente' | 'falla_justificada';
+export type EstadoRegistro = 'presente' | 'falla_justificada' | 'justificacion_pendiente' | 'falla_injustificada';
 
 @Entity('asistencia_registros')
 export class AsistenciaRegistroTenantEntity {
@@ -25,7 +25,7 @@ export class AsistenciaRegistroTenantEntity {
   @JoinColumn({ name: 'aprendizId' })
   aprendiz: PersonaOrmEntity;
 
-  @Column({ type: 'enum', enum: ['presente', 'falla_justificada'], default: 'presente' })
+  @Column({ type: 'enum', enum: ['presente', 'falla_justificada', 'justificacion_pendiente', 'falla_injustificada'], default: 'presente' })
   estado: EstadoRegistro;
 
   @Column({ type: 'timestamp' })

@@ -23,7 +23,7 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
         <div class="lp-logo">
           <lucide-icon name="calendar" [size]="28" class="lp-logo-icon"></lucide-icon>
           <div>
-            <div class="lp-logo-name">ChronoGest</div>
+            <div class="lp-logo-name">AsisApp</div>
             <div class="lp-logo-sub">SENA — Gestión de Horarios</div>
           </div>
         </div>
@@ -80,10 +80,6 @@ type AuthView = 'login' | 'pin' | 'register' | 'forgot' | 'verify-code' | 'reset
               Iniciar Sesión
             </button>
           </form>
-
-          <div class="login-links">
-            <button class="link-btn" (click)="goToPin()">¿No tienes acceso? Registrarse</button>
-          </div>
         </div>
         }
 

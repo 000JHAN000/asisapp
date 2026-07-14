@@ -1,5 +1,7 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
 import { ApiService } from '../../../core/services/api.service';
 import { LucideAngularModule } from 'lucide-angular';
 import { SearchableSelectComponent, SSOption } from '../../../shared/components/searchable-select.component';
@@ -17,6 +19,7 @@ interface TabGroup { label: string; icon: string; tabs: TabKey[]; }
   selector: 'app-admin-formativo',
   imports: [FormsModule, LucideAngularModule, SearchableSelectComponent],
   template: `
+    @if (!focusMode()) {
     <div>
       <h2>Proyecto Formativo — Base de Datos</h2>
       <p class="text-muted text-sm">CRUD completo de <code>proyecto_formativo_db</code> — {{ rows().length }} registros activos</p>
@@ -40,6 +43,18 @@ interface TabGroup { label: string; icon: string; tabs: TabKey[]; }
       </div>
       }
     </div>
+    } @else {
+    <div class="flex items-center gap-2">
+      <button class="btn btn-outline" (click)="location.back()">
+        <lucide-icon name="arrow-left" [size]="16"></lucide-icon>
+        Volver
+      </button>
+      <div>
+        <h2>{{ tabConfig[activeTab()].label }}</h2>
+        <p class="text-muted text-sm">{{ tabConfig[activeTab()].desc ?? '' }}</p>
+      </div>
+    </div>
+    }
 
     <!-- Table card -->
     <div class="card mt-4">
@@ -420,18 +435,18 @@ export class AdminFormativoComponent implements OnInit {
       create: d => this.api.createMunicipio(d), update: (id, d) => this.api.updateMunicipio(id, d), remove: id => this.api.deleteMunicipio(id),
     },
     ambientes: {
+      // Un ambiente no tiene sede ni municipio propios en el modelo de datos (esos campos
+      // no existen como columna real); solo pertenece a un Área, y esa área ya está en la
+      // sede del tenant actual, así que tampoco hace falta elegir sede aquí.
       label: 'Ambientes', desc: 'ambientes',
       cols: [
         { key: 'id', label: 'ID' }, { key: 'nombre', label: 'Nombre' },
         { key: 'capacidad', label: 'Capacidad' }, { key: 'area_nombre', label: 'Área' },
-        { key: 'sede_nombre', label: 'Sede' }, { key: 'municipio_nombre', label: 'Municipio' },
       ],
       fields: [
         { key: 'nombre', label: 'Nombre', required: true, span2: true },
         { key: 'capacidad', label: 'Capacidad', type: 'number' },
-        { key: 'area_id', label: 'Área', type: 'select', opts: 'areas' },
-        { key: 'sede_id', label: 'Sede', type: 'select', opts: 'sedes' },
-        { key: 'municipio_id', label: 'Municipio', type: 'select', opts: 'municipios' },
+        { key: 'area_fk', label: 'Área', type: 'select', opts: 'areas', required: true },
       ],
       load: () => this.api.getAmbientesFormativo().subscribe({ next: r => this.rows.set(r), error: e => this.setErr(e) }),
       create: d => this.api.createAmbienteFormativo(d), update: (id, d) => this.api.updateAmbienteFormativo(id, d), remove: id => this.api.deleteAmbienteFormativo(id),
@@ -455,21 +470,21 @@ export class AdminFormativoComponent implements OnInit {
     },
     programas: {
       label: 'Programas', desc: 'programas',
-      cols: [{ key: 'id', label: 'ID' }, { key: 'nombre', label: 'Nombre' }, { key: 'tipo', label: 'Tipo' }],
+      cols: [{ key: 'id', label: 'ID' }, { key: 'nombre', label: 'Nombre' }, { key: 'tipo_programa', label: 'Tipo' }],
       fields: [
         { key: 'nombre', label: 'Nombre', required: true },
-        { key: 'tipo', label: 'Tipo', type: 'enum-tipo-programa', required: true },
+        { key: 'tipo_programa', label: 'Tipo', type: 'enum-tipo-programa', required: true },
       ],
       load: () => this.api.getProgramas().subscribe({ next: r => this.rows.set(r), error: e => this.setErr(e) }),
       create: d => this.api.createPrograma(d), update: (id, d) => this.api.updatePrograma(id, d), remove: id => this.api.deletePrograma(id),
     },
     areas: {
+      // La sede ya no se pide en el formulario: cada tenant tiene exactamente una,
+      // así que el backend la asigna automáticamente al crear el área.
       label: 'Áreas', desc: 'areas',
-      cols: [{ key: 'id', label: 'ID' }, { key: 'nombre', label: 'Nombre' }, { key: 'sede_nombre', label: 'Sede' }, { key: 'lider_nombre', label: 'Instructor Líder' }],
+      cols: [{ key: 'id', label: 'ID' }, { key: 'nombre', label: 'Nombre' }, { key: 'sede_nombre', label: 'Sede' }],
       fields: [
         { key: 'nombre', label: 'Nombre', required: true },
-        { key: 'sede_id', label: 'Sede', type: 'select', opts: 'sedes', required: true },
-        { key: 'lider_id', label: 'Instructor Líder', type: 'select', opts: 'instructores-lider-area' },
       ],
       load: () => this.api.getAreas().subscribe({ next: r => this.rows.set(r), error: e => this.setErr(e) }),
       create: d => this.api.createArea(d), update: (id, d) => this.api.updateArea(id, d), remove: id => this.api.deleteArea(id),
@@ -637,10 +652,25 @@ export class AdminFormativoComponent implements OnInit {
 
   private toast = inject(ToastService);
 
-  constructor(private api: ApiService) {}
+  focusMode = signal(false);
+
+  constructor(private api: ApiService, private route: ActivatedRoute, public location: Location) {}
 
   ngOnInit() {
     this.loadRefData();
+
+    // Permite llegar directo a una pestaña (y opcionalmente abrir el formulario
+    // de creación) desde otras pantallas, ej. /dev/formativo?tab=areas&new=1,
+    // ocultando el resto de pestañas para no marear con información de más.
+    const tabParam = this.route.snapshot.queryParamMap.get('tab') as TabKey | null;
+    if (tabParam && tabParam in this.tabConfig) {
+      this.activeTab.set(tabParam);
+      this.focusMode.set(true);
+      if (this.route.snapshot.queryParamMap.get('new') === '1') {
+        setTimeout(() => this.openModal(), 0);
+      }
+    }
+
     this.loadTab();
   }
 
@@ -745,7 +775,7 @@ export class AdminFormativoComponent implements OnInit {
   getOpts(listKey: string): { id: any; label: string }[] {
     switch (listKey) {
       case 'centros': return this.centros().map(c => ({ id: c.id, label: c.nombre }));
-      case 'sedes': return this.sedes().map(s => ({ id: s.id, label: `${s.nombre}${s.centro_nombre ? ' · ' + s.centro_nombre : ''}` }));
+      case 'sedes': return this.sedes().map(s => ({ id: s.id_sede, label: `${s.nombre}${s.centro_nombre ? ' · ' + s.centro_nombre : ''}` }));
       case 'departamentos': return this.departamentos().map(d => ({ id: d.id, label: d.nombre }));
       case 'municipios': return this.municipios().map(m => ({ id: m.id, label: `${m.nombre}${m.departamento_nombre ? ' · ' + m.departamento_nombre : ''}` }));
       case 'ambientes': return this.ambientes().map(a => ({ id: a.id, label: a.nombre }));

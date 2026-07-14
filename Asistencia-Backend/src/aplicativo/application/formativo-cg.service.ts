@@ -128,11 +128,13 @@ export class FormativoCGService {
   }
 
   // ─── Ambientes ───
-  async getAmbientesFormativo() {
-    return (await this.getRepo(AmbienteOrmEntity)).find();
-  }
   async findAllAmbientes() {
-    return (await this.getRepo(AmbienteOrmEntity)).find();
+    const ambientes = await (await this.getRepo(AmbienteOrmEntity)).find({ relations: ['area'] });
+    return ambientes.map((a) => ({
+      ...a,
+      id: a.id_ambiente,
+      area_nombre: a.area?.nombre ?? null,
+    }));
   }
   async findOneAmbiente(id: string) {
     return (await this.getRepo(AmbienteOrmEntity)).findOneBy({ id_ambiente: id });
@@ -148,14 +150,32 @@ export class FormativoCGService {
   }
 
   // ─── Áreas ───
+  // Un tenant siempre tiene exactamente una sede propia (ver TenantProvisioningService),
+  // así que el área se asocia automáticamente a esa sede: el administrador no elige
+  // entre sedes porque en su base de datos nunca hay más de una.
+  private async sedePropiaId(): Promise<string> {
+    const sedeRepo = await this.getRepo(SedeOrmEntity);
+    const sede = await sedeRepo.findOne({ where: {} });
+    if (!sede) {
+      throw new BadRequestException('Esta sede aún no tiene un Centro de Formación configurado.');
+    }
+    return sede.id_sede;
+  }
+
   async findAllAreas() {
-    return (await this.getRepo(AreaOrmEntity)).find();
+    const areas = await (await this.getRepo(AreaOrmEntity)).find({ relations: ['sede'] });
+    return areas.map((a) => ({
+      ...a,
+      id: a.id_area,
+      sede_nombre: a.sede?.nombre ?? null,
+    }));
   }
   async findOneArea(id: string) {
     return (await this.getRepo(AreaOrmEntity)).findOneBy({ id_area: id });
   }
   async createArea(data: Partial<AreaOrmEntity>) {
-    return (await this.getRepo(AreaOrmEntity)).save(data);
+    const sede_fk = data.sede_fk ?? (await this.sedePropiaId());
+    return (await this.getRepo(AreaOrmEntity)).save({ ...data, sede_fk });
   }
   async updateArea(id: string, data: Partial<AreaOrmEntity>) {
     return (await this.getRepo(AreaOrmEntity)).update({ id_area: id }, data);
@@ -166,7 +186,8 @@ export class FormativoCGService {
 
   // ─── Programas ───
   async findAllProgramas() {
-    return (await this.getRepo(ProgramaOrmEntity)).find();
+    const programas = await (await this.getRepo(ProgramaOrmEntity)).find();
+    return programas.map((p) => ({ ...p, id: p.id_programa }));
   }
   async findOnePrograma(id: string) {
     return (await this.getRepo(ProgramaOrmEntity)).findOneBy({ id_programa: id });

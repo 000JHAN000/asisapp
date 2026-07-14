@@ -7,6 +7,11 @@ import { PersonaOrmEntity } from '../../persona/infrastructure/entities/persona.
 import { UsuarioOrmEntity } from '../../usuario/infrastructure/entities/usuario.orm-entity';
 import { CredencialOrmEntity } from '../../credencial/infrastructure/entities/credencial.orm-entity';
 import { RolOrmEntity } from '../../rol/infrastructure/entities/rol.orm-entity';
+import { DepartamentoOrmEntity } from '../../departamento/infrastructure/entities/departamento.orm-entity';
+import { MunicipioOrmEntity } from '../../municipio/infrastructure/entities/municipio.orm-entity';
+import { CentroFormacionOrmEntity } from '../../centro-formacion/infrastructure/entities/centro-formacion.orm-entity';
+import { SedeOrmEntity } from '../../sede/infrastructure/entities/sede.orm-entity';
+import { UsuarioMaestro } from '../infrastructure/entities/usuario-maestro.orm-entity';
 
 export interface CreateTenantInput {
   slug: string;
@@ -81,6 +86,11 @@ export class TenantProvisioningService {
       // el esquema cg_* anterior a la migración a legacy conectado).
       await this.connectionManager.getTenantDataSource(slug);
 
+      // Cada tenant representa exactamente una sede física: se crea automáticamente
+      // su propio Centro de Formación + Sede, para que el administrador no tenga
+      // que (ni pueda) elegir entre sedes de otros tenants al crear áreas/programas.
+      await this.seedSedePropia(slug, nombre);
+
       // Crear administrador inicial si se proporcionaron datos
       await this.createInitialAdmin(slug, input);
 
@@ -128,29 +138,78 @@ export class TenantProvisioningService {
 
     const hashed = await hash(adminPassword, 10);
 
-    const persona = await this.personaRepo.save({
-      documento: adminDocumento,
-      nombres: adminNombre,
-      apellidos: adminApellido ?? null,
-      correo: adminCorreo,
-      estado: 'activo' as any,
-    });
+    // Persona + usuario + credencial se crean en una sola transacción: si cualquiera
+    // de los tres pasos falla, no debe quedar un registro huérfano (p. ej. una persona
+    // sin usuario/credencial) que luego bloquee reintentos con el mismo documento/correo.
+    await this.masterDataSource.transaction(async (manager) => {
+      const persona = await manager.save(PersonaOrmEntity, {
+        documento: adminDocumento,
+        nombres: adminNombre,
+        apellidos: adminApellido ?? null,
+        correo: adminCorreo,
+        estado: 'activo' as any,
+      });
 
-    const usuario = await this.usuarioRepo.save({
-      persona_fk: persona.id_persona,
-      aplicativo_fk: '11111111-1111-1111-1111-111111111111',
-      tenant_slug: slug,
-      activo: true,
-    });
+      const usuario = await manager.save(UsuarioOrmEntity, {
+        persona_fk: persona.id_persona,
+        aplicativo_fk: '11111111-1111-1111-1111-111111111111',
+        tenant_slug: slug,
+        activo: true,
+      });
 
-    await this.credencialRepo.save({
-      login: adminCorreo,
-      password: hashed,
-      rol_fk: rolAdmin.id_rol,
-      usuario_fk: usuario.id_usuario,
+      await manager.save(CredencialOrmEntity, {
+        login: adminCorreo,
+        password: hashed,
+        rol_fk: rolAdmin.id_rol,
+        usuario_fk: usuario.id_usuario,
+      });
+
+      // auth.usuario_maestro es lo que leen los listados de usuarios (activo, municipio,
+      // tenantSlug); sin esta fila el administrador inicial no aparecería correctamente ahí.
+      await manager.save(UsuarioMaestro, {
+        correo: adminCorreo,
+        documento: adminDocumento,
+        password: hashed,
+        rol: 'admin',
+        personaId: persona.id_persona,
+        activo: true,
+        tenantSlug: slug,
+      });
     });
 
     this.logger.log(`Administrador inicial creado para sede '${slug}': ${adminCorreo}`);
+  }
+
+  /** Crea el Centro de Formación + Sede propios del tenant, si no existen aún.
+   *  Un tenant = una sede: no tiene sentido pedirle al administrador que elija
+   *  una sede entre varias, porque en su base de datos nunca habrá más de una.
+   *  Departamento/Municipio locales son solo un placeholder para satisfacer las
+   *  llaves foráneas (la información geográfica real se gestiona en el catálogo
+   *  compartido vía /api/formativo/departamentos y /municipios). */
+  private async seedSedePropia(slug: string, nombre: string): Promise<void> {
+    const centroRepo = await this.connectionManager.getTenantRepository(slug, CentroFormacionOrmEntity);
+    const existente = await centroRepo.findOne({ where: {} });
+    if (existente) return; // ya provisionada (p. ej. reintento sobre un tenant existente)
+
+    const departamentoRepo = await this.connectionManager.getTenantRepository(slug, DepartamentoOrmEntity);
+    const municipioRepo = await this.connectionManager.getTenantRepository(slug, MunicipioOrmEntity);
+
+    let departamento = await departamentoRepo.findOne({ where: {} });
+    if (!departamento) {
+      departamento = await departamentoRepo.save({ nombre: 'General' });
+    }
+
+    let municipio = await municipioRepo.findOne({ where: {} });
+    if (!municipio) {
+      municipio = await municipioRepo.save({ nombre: 'General', departamento_fk: departamento.id_departamento });
+    }
+
+    const centro = await centroRepo.save({ nombre, municipio_fk: municipio.id_municipio });
+
+    const sedeRepo = await this.connectionManager.getTenantRepository(slug, SedeOrmEntity);
+    await sedeRepo.save({ nombre: 'Sede Principal', centro_formacion_fk: centro.id_centro });
+
+    this.logger.log(`Sede propia creada para el tenant '${slug}'`);
   }
 
   private async createPhysicalDatabase(dbName: string): Promise<void> {

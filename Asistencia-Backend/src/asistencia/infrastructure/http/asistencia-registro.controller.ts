@@ -1,8 +1,10 @@
-import { Body, Controller, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Patch, Post, Req } from '@nestjs/common';
 import { AsistenciaRegistroService } from '../../application/asistencia-registro.service';
 import { CreateAsistenciaRegistroDto } from './dto/create-asistencia-registro.dto';
 import { MarcarFallaDto } from './dto/marcar-falla.dto';
 import { VerificarRostroDto } from './dto/verificar-rostro.dto';
+import { SolicitarJustificacionDto } from './dto/solicitar-justificacion.dto';
+import { ResolverJustificacionDto } from './dto/resolver-justificacion.dto';
 import { emitFirma } from './asistencia-sesion.controller';
 import { Roles } from 'src/auth/infrastructure/decorators/roles.decorator';
 import { normalizeIp } from 'src/infrastructure/utils/ip.util';
@@ -51,5 +53,26 @@ export class AsistenciaRegistroController {
   @Patch('falla-justificada')
   marcarFalla(@Body() dto: MarcarFallaDto) {
     return this.registroService.marcarFallaJustificada(dto);
+  }
+
+  @Roles('aprendiz', 'admin')
+  @Post('justificacion')
+  solicitarJustificacion(@Body() dto: SolicitarJustificacionDto, @Req() req: any) {
+    if (req.user && req.user.perfilId) {
+      dto.aprendizId = req.user.perfilId;
+    }
+    return this.registroService.solicitarJustificacion(dto);
+  }
+
+  @Roles('instructor', 'admin')
+  @Patch(':id/resolver-justificacion')
+  resolverJustificacion(@Param('id') id: string, @Body() dto: ResolverJustificacionDto) {
+    return this.registroService.resolverJustificacion(id, dto.aprobar);
+  }
+
+  @Roles('instructor', 'admin')
+  @Delete(':id')
+  quitarAsistencia(@Param('id') id: string) {
+    return this.registroService.quitarAsistencia(id);
   }
 }
